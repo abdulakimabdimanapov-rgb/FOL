@@ -1,0 +1,20 @@
+# FOL — Python dependencies
+# Core (cross-platform) deps are in requirements-core.txt; this file adds
+# the macOS-only extras on top (MLX, pyobjc, py-applescript, chromadb).
+-r requirements-core.txt
+
+# Dev & test tools
+pytest-xdist>=3.6.0
+pytest-asyncio
+httpx
+hypothesis>=6.0.0
+
+# FOL — macOS-only / heavy extras (merged)
+mlx>=0.19.0
+mlx-lm>=0.19.0
+mlx-whisper>=0.4.0
+chromadb>=0.5.5
+pyobjc>=10.3.0
+py-applescript==1.0.3
+langchain>=0.3.0
+langchain-community>=0.3.0

@@ -1,0 +1,28 @@
+# ────────────────────────────────────────────────────────────────
+# FOL — local compose setup
+#
+#   docker compose up --build
+#
+# Starts the FastAPI web backend on :8000. The orchestrator (:8420)
+# and agent-server (:8421) normally run on the host macOS session
+# (they need a GUI), so they are not containerised by default.
+# ────────────────────────────────────────────────────────────────
+services:
+  api:
+    build: .
+    image: second-self:latest
+    ports:
+      - "8000:8000"
+    # .env may be absent on a fresh checkout — that's fine, the API
+    # starts with default values and reads real keys when present.
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      PORT: "8000"
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
