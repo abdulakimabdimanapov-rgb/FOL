@@ -1,0 +1,734 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>FOL — Dashboard</title>
+<style>
+  :root {
+    --bg: #111113;
+    --surface: #1a1a1d;
+    --surface2: #222226;
+    --border: #2a2a2e;
+    --text: #e8e8ed;
+    --text2: #8e8e93;
+    --green: #30d158;
+    --yellow: #ffd60a;
+    --red: #ff453a;
+    --accent: #9ca161;
+    --accent2: #b5b055;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'SF Mono', 'Segoe UI', Roboto, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+    padding: 20px;
+  }
+  .container { max-width: 1400px; margin: 0 auto; }
+
+  /* Header */
+  .header {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 16px 0; margin-bottom: 24px;
+    border-bottom: 1px solid var(--border);
+  }
+  .header h1 {
+    font-size: 22px; font-weight: 700; letter-spacing: -0.5px;
+    background: linear-gradient(135deg, var(--accent), var(--accent2));
+    -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+  }
+  .header-time { font-size: 13px; color: var(--text2); font-family: 'SF Mono', monospace; }
+  .header-status { display: flex; align-items: center; gap: 8px; }
+  .status-dot {
+    width: 8px; height: 8px; border-radius: 50%;
+    animation: pulse-dot 2s ease-in-out infinite;
+  }
+  .status-dot.online { background: var(--green); }
+  .status-dot.offline { background: var(--red); animation: none; }
+  .status-dot.busy { background: var(--yellow); animation: pulse-dot 0.8s ease-in-out infinite; }
+  @keyframes pulse-dot { 0%,100% { opacity: 1; } 50% { opacity: 0.4; } }
+
+  /* Grid */
+  .grid {
+    display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+    gap: 16px; margin-bottom: 16px;
+  }
+  .card {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 12px; padding: 20px;
+    transition: border-color 0.2s, transform 0.2s;
+  }
+  .card:hover { border-color: var(--accent); transform: translateY(-1px); }
+  .card-title {
+    font-size: 11px; font-weight: 600; text-transform: uppercase;
+    letter-spacing: 1px; color: var(--text2); margin-bottom: 16px;
+  }
+  .card-full { grid-column: 1 / -1; }
+
+  /* Metric display */
+  .metric-row { display: flex; justify-content: space-between; align-items: center; padding: 6px 0; }
+  .metric-label { font-size: 13px; color: var(--text2); }
+  .metric-value { font-size: 14px; font-weight: 600; font-family: 'SF Mono', monospace; }
+  .metric-value.green { color: var(--green); }
+  .metric-value.yellow { color: var(--yellow); }
+  .metric-value.red { color: var(--red); }
+  .metric-value.accent { color: var(--accent); }
+
+  /* Progress bar */
+  .progress-track {
+    width: 100%; height: 6px; background: var(--surface2); border-radius: 3px;
+    margin-top: 8px; overflow: hidden;
+  }
+  .progress-fill {
+    height: 100%; border-radius: 3px; transition: width 0.5s ease;
+    background: linear-gradient(90deg, var(--accent), var(--accent2));
+  }
+  .progress-fill.critical { background: linear-gradient(90deg, var(--yellow), var(--red)); }
+  .progress-fill.good { background: linear-gradient(90deg, var(--green), var(--accent)); }
+
+  /* Big number */
+  .big-number {
+    font-size: 36px; font-weight: 700; font-family: 'SF Mono', monospace;
+    letter-spacing: -1px; line-height: 1;
+  }
+  .big-number.green { color: var(--green); }
+  .big-number.yellow { color: var(--yellow); }
+  .big-number.accent { color: var(--accent); }
+  .big-number-label { font-size: 12px; color: var(--text2); margin-top: 4px; }
+
+  /* Process list */
+  .proc-list { list-style: none; }
+  .proc-item {
+    display: flex; justify-content: space-between; align-items: center;
+    padding: 6px 0; border-bottom: 1px solid var(--border); font-size: 12px;
+  }
+  .proc-item:last-child { border-bottom: none; }
+  .proc-name { color: var(--text); max-width: 180px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .proc-cpu { color: var(--yellow); font-family: 'SF Mono', monospace; min-width: 48px; text-align: right; }
+  .proc-mem { color: var(--accent); font-family: 'SF Mono', monospace; min-width: 48px; text-align: right; }
+
+  /* Service chips */
+  .services-grid {
+    display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+    gap: 8px;
+  }
+  .service-item {
+    display: flex; flex-direction: column; align-items: center;
+    padding: 12px 8px; border-radius: 8px; background: var(--surface2);
+    font-size: 12px; gap: 4px;
+  }
+  .service-name { color: var(--text2); }
+  .service-port { font-family: 'SF Mono', monospace; color: var(--text2); font-size: 11px; }
+  .service-dot {
+    width: 6px; height: 6px; border-radius: 50%;
+  }
+  .service-dot.online { background: var(--green); }
+  .service-dot.degraded { background: var(--yellow); }
+  .service-dot.offline { background: var(--red); }
+  .service-status-label { font-size: 10px; text-transform: uppercase; letter-spacing: 0.5px; }
+  .service-status-label.ok { color: var(--green); }
+  .service-status-label.degraded { color: var(--yellow); }
+  .service-status-label.down { color: var(--red); }
+
+  /* System state banner */
+  .state-banner {
+    display: flex; align-items: center; gap: 12px;
+    padding: 12px 16px; border-radius: 10px; margin-bottom: 16px;
+    font-size: 14px; font-weight: 600; border: 1px solid var(--border);
+  }
+  .state-banner.ok { background: rgba(48,209,88,0.08); border-color: rgba(48,209,88,0.35); color: var(--green); }
+  .state-banner.degraded { background: rgba(255,214,10,0.08); border-color: rgba(255,214,10,0.35); color: var(--yellow); }
+  .state-banner.down { background: rgba(255,69,58,0.1); border-color: rgba(255,69,58,0.4); color: var(--red); }
+  .state-banner .state-detail { font-size: 12px; font-weight: 400; color: var(--text2); }
+
+  /* Lists for tool calls / errors / models */
+  .trace-list { list-style: none; max-height: 160px; overflow-y: auto; }
+  .trace-item {
+    display: flex; gap: 8px; align-items: baseline;
+    padding: 4px 0; font-size: 12px; border-bottom: 1px solid var(--border);
+  }
+  .trace-item:last-child { border-bottom: none; }
+  .trace-time { color: var(--text2); font-family: 'SF Mono', monospace; white-space: nowrap; font-size: 11px; }
+  .trace-tool { color: var(--accent); font-family: 'SF Mono', monospace; }
+  .trace-ok { color: var(--green); }
+  .trace-fail { color: var(--red); }
+  .trace-msg { color: var(--text); word-break: break-word; }
+  .model-chip {
+    display: inline-block; padding: 3px 8px; margin: 2px;
+    border-radius: 6px; background: var(--surface2);
+    font-family: 'SF Mono', monospace; font-size: 11px; color: var(--text);
+  }
+  .model-chip.primary { border: 1px solid var(--accent); color: var(--accent); }
+  .model-chip.fallback { border: 1px solid var(--yellow); color: var(--yellow); }
+
+  /* Memory status rows */
+  .mem-row { display: flex; justify-content: space-between; padding: 3px 0; font-size: 12px; }
+  .mem-file { color: var(--text2); }
+  .mem-size { font-family: 'SF Mono', monospace; }
+  .mem-ok { color: var(--green); }
+  .mem-missing { color: var(--red); }
+
+  /* Events */
+  .event-list { list-style: none; max-height: 200px; overflow-y: auto; }
+  .event-item {
+    display: flex; gap: 8px; padding: 4px 0;
+    font-size: 12px; border-bottom: 1px solid var(--border);
+  }
+  .event-date { color: var(--text2); font-family: 'SF Mono', monospace; white-space: nowrap; min-width: 90px; }
+  .event-cat { color: var(--accent); font-family: 'SF Mono', monospace; font-size: 10px; min-width: 60px; }
+  .event-text { color: var(--text); }
+
+  /* Spinner for loading state */
+  .spinner {
+    width: 16px; height: 16px; border: 2px solid var(--border);
+    border-top-color: var(--accent); border-radius: 50%;
+    animation: spin 0.8s linear infinite; margin: 20px auto;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* Scrollbar */
+  ::-webkit-scrollbar { width: 4px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+  ::-webkit-scrollbar-thumb:hover { background: var(--accent); }
+
+  /* Responsive */
+  @media (max-width: 768px) {
+    body { padding: 12px; }
+    .grid { grid-template-columns: 1fr; }
+    .header h1 { font-size: 18px; }
+    .big-number { font-size: 28px; }
+  }
+
+  /* Mini notch indicator */
+  .mini-notch {
+    display: inline-flex; align-items: center; gap: 6px;
+    padding: 4px 12px; border-radius: 20px;
+    background: var(--surface2); font-size: 12px; font-family: 'SF Mono', monospace;
+  }
+</style>
+</head>
+<body>
+<div class="container">
+  <!-- Header -->
+  <div class="header">
+    <div style="display:flex;align-items:center;gap:12px">
+      <h1>◈ Dashboard</h1>
+      <div class="mini-notch" id="miniNotch">
+        <span class="status-dot online" id="headerDot"></span>
+        <span id="headerState">idle</span>
+      </div>
+    </div>
+    <div class="header-status">
+      <span class="header-time" id="headerTime">—</span>
+    </div>
+  </div>
+
+  <!-- Phase 7: System state banner (OK / DEGRADED / DOWN — never faked) -->
+  <div class="state-banner ok" id="stateBanner">
+    <span id="stateLabel">SYSTEM OK</span>
+    <span class="state-detail" id="stateDetail">Checking services…</span>
+  </div>
+
+  <!-- Row 1: CPU + RAM + Disk + Uptime -->
+  <div class="grid" id="rowMetrics">
+    <div class="card">
+      <div class="card-title">CPU</div>
+      <div class="big-number accent" id="cpuPercent">—</div>
+      <div class="big-number-label" id="cpuLabel">Load: —</div>
+      <div class="progress-track"><div class="progress-fill" id="cpuBar" style="width:0%"></div></div>
+      <div style="margin-top:12px">
+        <div class="metric-row"><span class="metric-label">User</span><span class="metric-value" id="cpuUser">—</span></div>
+        <div class="metric-row"><span class="metric-label">System</span><span class="metric-value" id="cpuSys">—</span></div>
+        <div class="metric-row"><span class="metric-label">Idle</span><span class="metric-value green" id="cpuIdle">—</span></div>
+        <div class="metric-row"><span class="metric-label">Cores</span><span class="metric-value" id="cpuCores">—</span></div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">Memory (RAM)</div>
+      <div class="big-number" id="memPercent">—</div>
+      <div class="big-number-label" id="memLabel">—</div>
+      <div class="progress-track"><div class="progress-fill" id="memBar" style="width:0%"></div></div>
+      <div style="margin-top:12px">
+        <div class="metric-row"><span class="metric-label">Used</span><span class="metric-value yellow" id="memUsed">—</span></div>
+        <div class="metric-row"><span class="metric-label">Free</span><span class="metric-value green" id="memFree">—</span></div>
+        <div class="metric-row"><span class="metric-label">Total</span><span class="metric-value" id="memTotal">—</span></div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">Disk</div>
+      <div class="big-number" id="diskPercent">—</div>
+      <div class="big-number-label" id="diskLabel">—</div>
+      <div class="progress-track"><div class="progress-fill" id="diskBar" style="width:0%"></div></div>
+      <div style="margin-top:12px">
+        <div class="metric-row"><span class="metric-label">Used</span><span class="metric-value yellow" id="diskUsed">—</span></div>
+        <div class="metric-row"><span class="metric-label">Free</span><span class="metric-value green" id="diskFree">—</span></div>
+        <div class="metric-row"><span class="metric-label">Total</span><span class="metric-value" id="diskTotal">—</span></div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">System</div>
+      <div class="big-number accent" id="uptimeVal">—</div>
+      <div class="big-number-label" id="uptimeLabel">uptime</div>
+      <div style="margin-top:12px">
+        <div class="metric-row"><span class="metric-label">macOS</span><span class="metric-value" id="osVersion">—</span></div>
+        <div class="metric-row"><span class="metric-label">Host</span><span class="metric-value" id="hostName">—</span></div>
+        <div class="metric-row"><span class="metric-label">Time</span><span class="metric-value" id="sysTime">—</span></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Row 2: Services + Top Processes -->
+  <div class="grid">
+    <div class="card">
+      <div class="card-title">Services</div>
+      <div class="services-grid" id="servicesGrid">
+        <div class="spinner"></div>
+      </div>
+    </div>
+
+    <div class="card" id="orchestratorCard">
+      <div class="card-title">Orchestrator</div>
+      <div style="display:flex;gap:16px;align-items:center;margin-bottom:12px">
+        <div style="text-align:center">
+          <div class="big-number green" id="orchState" style="font-size:28px">—</div>
+          <div class="big-number-label">State</div>
+        </div>
+        <div style="text-align:center">
+          <div class="big-number accent" id="orchActions" style="font-size:28px">—</div>
+          <div class="big-number-label">Actions</div>
+        </div>
+        <div style="flex:1;min-width:0">
+          <div class="metric-row"><span class="metric-label">Task</span></div>
+          <div style="font-size:12px;color:var(--text2);word-break:break-all;max-height:40px;overflow:hidden" id="orchTask">—</div>
+        </div>
+      </div>
+      <div class="metric-row"><span class="metric-label">Agent Server</span><span class="metric-value" id="orchAgent">—</span></div>
+      <div class="metric-row"><span class="metric-label">Anthropic</span><span class="metric-value" id="orchAnthropic">—</span></div>
+      <div class="metric-row"><span class="metric-label">Tavily</span><span class="metric-value" id="orchTavily">—</span></div>
+      <div class="metric-row"><span class="metric-label">Obsidian</span><span class="metric-value" id="orchObsidian">—</span></div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">Top Processes (CPU)</div>
+      <ul class="proc-list" id="procList">
+        <li style="color:var(--text2);font-size:12px;padding:8px 0">Loading...</li>
+      </ul>
+    </div>
+  </div>
+
+  <!-- Phase 7: LLM + Fallback + Ollama -->
+  <div class="grid">
+    <div class="card">
+      <div class="card-title">LLM / Fallback</div>
+      <div class="metric-row"><span class="metric-label">Status</span><span class="metric-value" id="llmStatus">—</span></div>
+      <div style="margin-top:8px">
+        <div class="metric-label" style="margin-bottom:4px">Model chain</div>
+        <div id="llmChain">—</div>
+      </div>
+      <div style="margin-top:10px">
+        <div class="metric-label" style="margin-bottom:4px">Providers</div>
+        <div id="llmProviders" style="font-size:12px;color:var(--text2)">—</div>
+      </div>
+      <div style="margin-top:10px">
+        <div class="metric-label" style="margin-bottom:4px">Fallback log (last failures)</div>
+        <ul class="trace-list" id="fallbackLog">
+          <li style="color:var(--text2);font-size:12px;padding:4px 0">—</li>
+        </ul>
+      </div>
+      <div class="metric-row" style="margin-top:6px"><span class="metric-label">Last fallback error</span><span class="metric-value red" id="lastFallbackError" style="font-size:11px;text-align:right">—</span></div>
+      <div class="metric-row"><span class="metric-label">Tavily search</span><span class="metric-value" id="llmTavily">—</span></div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">Ollama (local LLM)</div>
+      <div class="metric-row"><span class="metric-label">Status</span><span class="metric-value" id="ollamaStatus">—</span></div>
+      <div style="margin-top:8px">
+        <div class="metric-label" style="margin-bottom:4px">Installed models</div>
+        <div id="ollamaModels">—</div>
+      </div>
+      <div class="metric-row" style="margin-top:8px"><span class="metric-label">Reason</span><span class="metric-value" id="ollamaReason" style="font-size:11px;text-align:right">—</span></div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">Runtime</div>
+      <div class="metric-row"><span class="metric-label">Active agent</span><span class="metric-value accent" id="rtAgent">—</span></div>
+      <div class="metric-row"><span class="metric-label">State</span><span class="metric-value" id="rtState">—</span></div>
+      <div class="metric-row"><span class="metric-label">Orchestrator uptime</span><span class="metric-value" id="rtUptime">—</span></div>
+      <div class="metric-row"><span class="metric-label">Dashboard uptime</span><span class="metric-value" id="dashUptime">—</span></div>
+      <div style="margin-top:8px">
+        <div class="metric-label">Current task</div>
+        <div style="font-size:12px;color:var(--text2);word-break:break-all;max-height:48px;overflow:hidden" id="rtTask">—</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Phase 7: Recent tool calls + recent errors + memory -->
+  <div class="grid">
+    <div class="card">
+      <div class="card-title">Recent Tool Calls</div>
+      <ul class="trace-list" id="toolCallList">
+        <li style="color:var(--text2);font-size:12px;padding:8px 0">Loading...</li>
+      </ul>
+    </div>
+
+    <div class="card">
+      <div class="card-title">Recent Errors</div>
+      <ul class="trace-list" id="errorList">
+        <li style="color:var(--text2);font-size:12px;padding:8px 0">Loading...</li>
+      </ul>
+    </div>
+
+    <div class="card">
+      <div class="card-title">Memory</div>
+      <div class="mem-row"><span class="mem-file">identity.md</span><span class="mem-size" id="memIdentity">—</span></div>
+      <div class="mem-row"><span class="mem-file">preferences.md</span><span class="mem-size" id="memPreferences">—</span></div>
+      <div class="mem-row"><span class="mem-file">episodic.md</span><span class="mem-size" id="memEpisodic">—</span></div>
+      <div style="margin-top:8px">
+        <div class="metric-row"><span class="metric-label">Obsidian</span><span class="metric-value" id="memObsidian">—</span></div>
+      </div>
+      <div class="metric-row" style="margin-top:6px"><span class="metric-label">Dir</span><span class="metric-value" style="font-size:11px;text-align:right" id="memDir">—</span></div>
+    </div>
+  </div>
+
+  <!-- Row 3: Recent Events -->
+  <div class="grid">
+    <div class="card card-full">
+      <div class="card-title">Recent Events</div>
+      <ul class="event-list" id="eventList">
+        <li style="color:var(--text2);font-size:12px;padding:8px 0">Loading...</li>
+      </ul>
+    </div>
+  </div>
+</div>
+
+<script>
+// -----------------------------------------------------------------------
+// Live Dashboard — WebSocket connection
+// -----------------------------------------------------------------------
+
+const WS_URL = `ws://${location.host}/ws`;
+
+function connect() {
+  const ws = new WebSocket(WS_URL);
+
+  ws.onopen = () => {
+    document.getElementById('headerDot').className = 'status-dot online';
+  };
+
+  ws.onmessage = (e) => {
+    try {
+      const msg = JSON.parse(e.data);
+      if (msg.type === 'metrics') {
+        updateDashboard(msg.data);
+      }
+    } catch (err) {
+      console.error('Parse error:', err);
+    }
+  };
+
+  ws.onclose = () => {
+    document.getElementById('headerDot').className = 'status-dot offline';
+    setTimeout(connect, 3000);
+  };
+
+  ws.onerror = () => ws.close();
+}
+
+connect();
+
+// -----------------------------------------------------------------------
+// Helpers
+// -----------------------------------------------------------------------
+
+function fmtUptime(seconds) {
+  if (seconds == null) return '—';
+  const d = Math.floor(seconds / 86400);
+  const h = Math.floor((seconds % 86400) / 3600);
+  const m = Math.floor((seconds % 3600) / 60);
+  if (d > 0) return `${d}d ${h}h ${m}m`;
+  if (h > 0) return `${h}h ${m}m`;
+  return `${m}m`;
+}
+
+function fmtTime(ts) {
+  if (!ts) return '—';
+  const t = new Date(ts * 1000);
+  return t.toLocaleTimeString();
+}
+
+function renderMemFile(id, file) {
+  const el = document.getElementById(id);
+  if (!file) { el.textContent = '—'; return; }
+  if (file.exists) {
+    el.innerHTML = `<span class="mem-ok">✓ ${fmtBytes(file.size)}</span>`;
+  } else {
+    el.innerHTML = '<span class="mem-missing">✗ missing</span>';
+  }
+}
+
+function fmtBytes(bytes) {
+  if (!bytes) return '0 B';
+  if (bytes > 1048576) return (bytes / 1048576).toFixed(1) + ' MB';
+  if (bytes > 1024) return (bytes / 1024).toFixed(1) + ' KB';
+  return bytes + ' B';
+}
+
+// -----------------------------------------------------------------------
+// Update functions
+// -----------------------------------------------------------------------
+
+function updateDashboard(data) {
+  const { metrics, orchestrator, runtime, events, llm, ollama, memory } = data;
+
+  // ── Phase 7: system state banner (never faked) ──
+  if (metrics?.system_state) {
+    const ss = metrics.system_state;
+    const banner = document.getElementById('stateBanner');
+    banner.className = 'state-banner ' + ss.state;
+    const labels = { ok: 'SYSTEM OK', degraded: 'SYSTEM DEGRADED', down: 'SYSTEM DOWN' };
+    document.getElementById('stateLabel').textContent = labels[ss.state] || ss.state.toUpperCase();
+    const parts = [];
+    if (ss.down_services?.length) parts.push('DOWN: ' + ss.down_services.join(', '));
+    if (ss.degraded_services?.length) parts.push('DEGRADED: ' + ss.degraded_services.join(', '));
+    document.getElementById('stateDetail').textContent = parts.join(' · ') || 'All services healthy';
+  }
+
+  // ── Phase 7: LLM / fallback ──
+  const llmData = llm || runtime?.llm || {};
+  if (llmData.status) {
+    const statusEl = document.getElementById('llmStatus');
+    statusEl.textContent = llmData.status;
+    statusEl.className = 'metric-value ' +
+      (llmData.status === 'ready' || llmData.status === 'ready_local' ? 'green' :
+       llmData.status === 'missing_key' || llmData.status === 'not_configured' ? 'yellow' : 'red');
+  }
+  if (llmData.model_chain) {
+    const chain = llmData.model_chain;
+    document.getElementById('llmChain').innerHTML = chain.map((m, i) =>
+      `<span class="model-chip ${i === 0 ? 'primary' : 'fallback'}">${m}</span>`
+    ).join('') || '—';
+  }
+  if (llmData.providers) {
+    document.getElementById('llmProviders').textContent = llmData.providers.join(', ') || '—';
+  }
+  if (llmData.fallback_log) {
+    const list = document.getElementById('fallbackLog');
+    if (llmData.fallback_log.length) {
+      list.innerHTML = llmData.fallback_log.slice(-5).reverse().map(e =>
+        `<li class="trace-item"><span class="trace-msg">${e.provider || ''} / ${e.model || ''} — ${e.reason || ''}</span></li>`
+      ).join('');
+    } else {
+      list.innerHTML = '<li style="color:var(--text2);font-size:12px;padding:4px 0">No fallbacks triggered</li>';
+    }
+  }
+  document.getElementById('lastFallbackError').textContent = llmData.last_fallback_error || '—';
+  document.getElementById('llmTavily').innerHTML =
+    llmData.tavily_configured ? '<span class="green">✓ configured</span>' : '<span class="text2">— not set</span>';
+
+  // ── Phase 7: Ollama ──
+  if (ollama) {
+    const stEl = document.getElementById('ollamaStatus');
+    stEl.textContent = ollama.status || '—';
+    stEl.className = 'metric-value ' + (ollama.status === 'ok' ? 'green' : ollama.status === 'degraded' ? 'yellow' : 'red');
+    document.getElementById('ollamaModels').innerHTML =
+      (ollama.models || []).map(m => `<span class="model-chip">${m}</span>`).join('') || '—';
+    document.getElementById('ollamaReason').textContent = ollama.reason || '—';
+  }
+
+  // ── Phase 7: Runtime (agent / task / uptime) ──
+  const rt = runtime || {};
+  const job = rt.job || {};
+  const agent = rt.agent || {};
+  if (agent.current) {
+    document.getElementById('rtAgent').textContent = agent.current;
+  }
+  if (job.state) {
+    const stEl = document.getElementById('rtState');
+    stEl.textContent = job.state;
+    stEl.className = 'metric-value ' + (job.state === 'error' ? 'red' : (job.state === 'thinking' || job.state === 'working') ? 'yellow' : 'green');
+  }
+  if (rt.uptime_seconds != null) {
+    document.getElementById('rtUptime').textContent = fmtUptime(rt.uptime_seconds);
+  }
+  document.getElementById('rtTask').textContent = job.task || '—';
+  if (metrics?.dashboard_uptime) {
+    document.getElementById('dashUptime').textContent = metrics.dashboard_uptime.uptime_str || '—';
+  }
+
+  // ── Phase 7: Recent tool calls ──
+  if (rt.recent_tool_calls) {
+    const list = document.getElementById('toolCallList');
+    if (rt.recent_tool_calls.length) {
+      list.innerHTML = rt.recent_tool_calls.map(c =>
+        `<li class="trace-item">
+          <span class="trace-time">${fmtTime(c.ts)}</span>
+          <span class="trace-tool">${c.tool}</span>
+          <span class="${c.ok ? 'trace-ok' : 'trace-fail'}">${c.ok ? '✓' : '✗'}</span>
+        </li>`
+      ).join('');
+    } else {
+      list.innerHTML = '<li style="color:var(--text2);font-size:12px;padding:8px 0">No tool calls yet</li>';
+    }
+  }
+
+  // ── Phase 7: Recent errors ──
+  if (rt.recent_errors) {
+    const list = document.getElementById('errorList');
+    if (rt.recent_errors.length) {
+      list.innerHTML = rt.recent_errors.map(e =>
+        `<li class="trace-item">
+          <span class="trace-time">${fmtTime(e.ts)}</span>
+          <span class="trace-fail">${e.source}</span>
+          <span class="trace-msg">${e.message}</span>
+        </li>`
+      ).join('');
+    } else {
+      list.innerHTML = '<li style="color:var(--text2);font-size:12px;padding:8px 0">No errors recorded</li>';
+    }
+  }
+
+  // ── Phase 7: Memory ──
+  const memData = memory || (runtime?.memory || {});
+  if (memData.files) {
+    renderMemFile('memIdentity', memData.files.identity);
+    renderMemFile('memPreferences', memData.files.preferences);
+    renderMemFile('memEpisodic', memData.files.episodic);
+  }
+  if (memData.obsidian_connected != null) {
+    const el = document.getElementById('memObsidian');
+    el.innerHTML = memData.obsidian_connected ? '<span class="green">✓ connected</span>' : '<span class="yellow">— not connected</span>';
+  }
+  if (memData.dir) document.getElementById('memDir').textContent = memData.dir;
+
+  // Header time
+  if (metrics?.system) {
+    const t = new Date(metrics.system.time);
+    document.getElementById('headerTime').textContent = t.toLocaleTimeString();
+  }
+
+  // CPU
+  if (metrics?.cpu) {
+    const cpu = metrics.cpu;
+    const pct = cpu.load_percent || 0;
+    document.getElementById('cpuPercent').textContent = pct.toFixed(0) + '%';
+    document.getElementById('cpuLabel').textContent = `Load: ${cpu.load_avg_1min} / ${cpu.load_avg_5min} / ${cpu.load_avg_15min}`;
+    document.getElementById('cpuBar').style.width = Math.min(pct, 100) + '%';
+    document.getElementById('cpuBar').className = pct > 80 ? 'progress-fill critical' : 'progress-fill';
+    document.getElementById('cpuUser').textContent = cpu.user_percent + '%';
+    document.getElementById('cpuSys').textContent = cpu.sys_percent + '%';
+    document.getElementById('cpuIdle').textContent = cpu.idle_percent + '%';
+    document.getElementById('cpuCores').textContent = cpu.cores + ' cores';
+  }
+
+  // Memory
+  if (metrics?.memory) {
+    const mem = metrics.memory;
+    document.getElementById('memPercent').textContent = mem.used_percent + '%';
+    document.getElementById('memLabel').textContent = `${mem.used_gb} GB / ${mem.total_gb} GB`;
+    document.getElementById('memBar').style.width = Math.min(mem.used_percent, 100) + '%';
+    document.getElementById('memBar').className = mem.used_percent > 80 ? 'progress-fill critical' : mem.used_percent > 50 ? 'progress-fill' : 'progress-fill good';
+    document.getElementById('memUsed').textContent = mem.used_gb + ' GB';
+    document.getElementById('memFree').textContent = mem.free_gb + ' GB';
+    document.getElementById('memTotal').textContent = mem.total_gb + ' GB';
+  }
+
+  // Disk
+  if (metrics?.disk) {
+    const d = metrics.disk;
+    document.getElementById('diskPercent').textContent = d.used_percent + '%';
+    document.getElementById('diskLabel').textContent = `${d.used_gb} GB / ${d.total_gb} GB`;
+    document.getElementById('diskBar').style.width = Math.min(d.used_percent, 100) + '%';
+    document.getElementById('diskBar').className = d.used_percent > 85 ? 'progress-fill critical' : d.used_percent > 60 ? 'progress-fill' : 'progress-fill good';
+    document.getElementById('diskUsed').textContent = d.used_gb + ' GB';
+    document.getElementById('diskFree').textContent = d.free_gb + ' GB';
+    document.getElementById('diskTotal').textContent = d.total_gb + ' GB';
+  }
+
+  // System
+  if (metrics?.system) {
+    const s = metrics.system;
+    document.getElementById('uptimeVal').textContent = s.uptime_str || '—';
+    document.getElementById('uptimeLabel').textContent = `up for ${s.uptime_days?.toFixed(1) || '0'} days`;
+    document.getElementById('osVersion').textContent = s.os || '—';
+    document.getElementById('hostName').textContent = s.hostname || '—';
+    document.getElementById('sysTime').textContent = s.time ? new Date(s.time).toLocaleString() : '—';
+  }
+
+  // Top processes
+  if (metrics?.top_processes) {
+    const list = document.getElementById('procList');
+    list.innerHTML = metrics.top_processes.map(p =>
+      `<li class="proc-item">
+        <span class="proc-name" title="${p.name}">${p.name}</span>
+        <span class="proc-cpu">${p.cpu_percent}%</span>
+        <span class="proc-mem">${p.mem_percent}%</span>
+      </li>`
+    ).join('');
+  }
+
+  // Services (Phase 7: status ok / degraded / down)
+  if (metrics?.services) {
+    const grid = document.getElementById('servicesGrid');
+    const PORT_MAP = { orchestrator: 8420, agent_server: 8421, bridge: 8422, dashboard: 8423, fol: 8754, nextjs: 3000, fastapi: 8000, ollama: 11434 };
+    grid.innerHTML = Object.entries(metrics.services).map(([name, svc]) => {
+      const status = svc?.status || 'down';
+      const dot = status === 'ok' ? 'online' : status === 'degraded' ? 'degraded' : 'offline';
+      const label = status === 'ok' ? 'OK' : status === 'degraded' ? 'DEGRADED' : 'DOWN';
+      return `<div class="service-item" title="${svc?.detail || ''}">
+        <div class="service-dot ${dot}"></div>
+        <div class="service-name">${name.replace(/_/g, ' ')}</div>
+        <div class="service-port">:${PORT_MAP[name] || svc?.port || '?'}</div>
+        <div class="service-status-label ${status}">${label}</div>
+      </div>`;
+    }).join('');
+  }
+
+  // Orchestrator status
+  if (orchestrator) {
+    const s = orchestrator.status || {};
+    const h = orchestrator.health || {};
+
+    const state = s.state || 'idle';
+    const dot = document.getElementById('headerDot');
+    if (state === 'thinking' || state === 'working') {
+      dot.className = 'status-dot busy';
+    } else if (state === 'idle' || state === 'complete') {
+      dot.className = 'status-dot online';
+    } else {
+      dot.className = 'status-dot offline';
+    }
+    document.getElementById('headerState').textContent = state;
+    document.getElementById('orchState').textContent = state;
+    document.getElementById('orchState').className = state === 'error' ? 'big-number red' : state === 'thinking' || state === 'working' ? 'big-number yellow' : 'big-number green';
+    document.getElementById('orchActions').textContent = s.actions_count || 0;
+    document.getElementById('orchTask').textContent = s.task || '—';
+
+    // Health indicators
+    const agentOk = h?.agent_server?.status === 'ok';
+    document.getElementById('orchAgent').innerHTML = agentOk ? '<span class="green">✓ connected</span>' : '<span class="red">✗ unreachable</span>';
+    document.getElementById('orchAnthropic').innerHTML = h?.anthropic_configured ? '<span class="green">✓ configured</span>' : '<span class="text2">— not set</span>';
+    document.getElementById('orchTavily').innerHTML = h?.tavily_configured ? '<span class="green">✓ configured</span>' : '<span class="text2">— not set</span>';
+    document.getElementById('orchObsidian').innerHTML = h?.obsidian_connected ? '<span class="green">✓ connected</span>' : '<span class="text2">— not connected</span>';
+  }
+
+  // Events
+  if (events && events.length > 0) {
+    const list = document.getElementById('eventList');
+    list.innerHTML = events.map(e =>
+      `<li class="event-item">
+        <span class="event-date">${e.date || ''}</span>
+        <span class="event-cat">${e.category || ''}</span>
+        <span class="event-text">${e.summary || ''}</span>
+      </li>`
+    ).join('');
+  }
+}
+</script>
+</body>
+</html>

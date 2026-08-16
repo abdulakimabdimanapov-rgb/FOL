@@ -1,0 +1,950 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="color-scheme" content="dark">
+<title>FOL</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+:root {
+  --accent: #7c5cff;
+  --accent-glow: rgba(124, 92, 255, 0.4);
+  --accent-light: #a78bfa;
+  --surface: rgba(22, 22, 28, 0.88);
+  --surface-hover: rgba(32, 32, 40, 0.92);
+  --surface-border: rgba(255, 255, 255, 0.07);
+  --text-primary: #f0f0f5;
+  --text-secondary: rgba(240, 240, 245, 0.55);
+  --text-tertiary: rgba(240, 240, 245, 0.3);
+  --success: #34d399;
+  --warning: #fbbf24;
+  --danger: #f87171;
+  --radius-sm: 10px;
+  --radius-md: 16px;
+  --radius-lg: 22px;
+  --radius-xl: 28px;
+  --radius-pill: 100px;
+}
+
+body {
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'SF Pro Display', system-ui, sans-serif;
+  background: #0a0a0f;
+  color: var(--text-primary);
+  height: 100vh;
+  overflow: hidden;
+  user-select: none;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   BACKGROUND — Gradient mesh + subtle noise
+   ═══════════════════════════════════════════════════════════════════ */
+#bg {
+  position: fixed; inset: 0; z-index: 0;
+  background:
+    radial-gradient(ellipse 80% 50% at 20% 20%, rgba(124, 92, 255, 0.08) 0%, transparent 60%),
+    radial-gradient(ellipse 60% 40% at 80% 80%, rgba(56, 189, 248, 0.06) 0%, transparent 50%),
+    radial-gradient(ellipse 50% 50% at 50% 50%, rgba(124, 92, 255, 0.03) 0%, transparent 70%),
+    #0a0a0f;
+}
+#bg::after {
+  content: '';
+  position: absolute; inset: 0;
+  background: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.03'/%3E%3C/svg%3E");
+  opacity: 0.5;
+}
+
+/* Floating orbs in background */
+.bg-orb {
+  position: fixed;
+  border-radius: 50%;
+  filter: blur(80px);
+  opacity: 0.15;
+  animation: orbFloat 20s ease-in-out infinite;
+  z-index: 0;
+}
+.bg-orb:nth-child(1) {
+  width: 300px; height: 300px;
+  background: var(--accent);
+  top: -100px; left: -50px;
+  animation-delay: 0s;
+}
+.bg-orb:nth-child(2) {
+  width: 200px; height: 200px;
+  background: #38bdf8;
+  bottom: -80px; right: -40px;
+  animation-delay: -7s;
+  animation-duration: 25s;
+}
+.bg-orb:nth-child(3) {
+  width: 150px; height: 150px;
+  background: #a78bfa;
+  top: 50%; left: 60%;
+  animation-delay: -14s;
+  animation-duration: 22s;
+}
+@keyframes orbFloat {
+  0%, 100% { transform: translate(0, 0) scale(1); }
+  25% { transform: translate(30px, -20px) scale(1.05); }
+  50% { transform: translate(-15px, 25px) scale(0.95); }
+  75% { transform: translate(20px, 10px) scale(1.02); }
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   NOTCH — The island lives here
+   ═══════════════════════════════════════════════════════════════════ */
+#notch-area {
+  position: fixed;
+  top: 0; left: 0; right: 0;
+  height: 36px;
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
+  padding-top: 8px;
+  z-index: 50;
+}
+
+#island {
+  position: relative;
+  z-index: 100;
+  opacity: 0;
+  transform: translateY(-20px) scale(0.9);
+  animation: islandAppear 0.7s cubic-bezier(0.16, 1, 0.3, 1) 0.2s forwards;
+  transition: all 0.45s cubic-bezier(0.4, 0, 0.2, 1);
+}
+@keyframes islandAppear {
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   PILL — Collapsed state
+   ═══════════════════════════════════════════════════════════════════ */
+#pill {
+  height: 40px;
+  min-width: 160px;
+  background: var(--surface);
+  border: 1px solid var(--surface-border);
+  border-radius: var(--radius-pill);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 0 18px;
+  cursor: pointer;
+  transition: all 0.45s cubic-bezier(0.4, 0, 0.2, 1);
+  backdrop-filter: blur(40px) saturate(1.5);
+  -webkit-backdrop-filter: blur(40px) saturate(1.5);
+  box-shadow:
+    0 2px 20px rgba(0, 0, 0, 0.3),
+    0 0 0 0.5px rgba(255, 255, 255, 0.05) inset;
+  position: relative;
+  overflow: hidden;
+}
+#pill::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: linear-gradient(135deg, rgba(255,255,255,0.04) 0%, transparent 50%);
+  pointer-events: none;
+}
+#pill:hover {
+  background: var(--surface-hover);
+  box-shadow:
+    0 4px 30px rgba(0, 0, 0, 0.4),
+    0 0 0 0.5px rgba(124, 92, 255, 0.15) inset,
+    0 0 20px var(--accent-glow);
+  transform: scale(1.02);
+}
+#pill:active {
+  transform: scale(0.98);
+}
+
+/* Has preview text */
+#pill.has-preview {
+  min-width: min(320px, 70vw);
+  justify-content: flex-start;
+}
+#pill.has-preview:hover {
+  min-width: min(480px, 90vw);
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   AVATAR — Smiski-inspired animated character
+   ═══════════════════════════════════════════════════════════════════ */
+#avatar-wrap {
+  width: 28px; height: 28px;
+  flex-shrink: 0;
+  position: relative;
+  animation: avatarEntrance 0.5s cubic-bezier(0.16, 1, 0.3, 1) 0.5s backwards;
+}
+@keyframes avatarEntrance {
+  from { opacity: 0; transform: scale(0.3) rotate(-10deg); }
+  to { opacity: 1; transform: scale(1) rotate(0deg); }
+}
+
+/* SVG Avatar character */
+#avatar-svg {
+  width: 100%; height: 100%;
+  transition: all 0.3s;
+}
+#avatar-svg .body {
+  fill: var(--accent);
+  transition: fill 0.3s;
+}
+#avatar-svg .face {
+  fill: var(--text-primary);
+}
+#avatar-svg .eye {
+  fill: #0a0a0f;
+  transition: all 0.3s;
+}
+#avatar-svg .cheek {
+  fill: rgba(251, 113, 133, 0.4);
+  transition: fill 0.3s, opacity 0.3s;
+  opacity: 0.6;
+}
+
+/* Avatar glow ring */
+#avatar-glow {
+  position: absolute;
+  inset: -3px;
+  border-radius: 50%;
+  border: 1.5px solid transparent;
+  transition: all 0.4s;
+  pointer-events: none;
+}
+
+/* Avatar states */
+#island.listening #avatar-svg .body { fill: var(--success); }
+#island.listening #avatar-glow { border-color: rgba(52, 211, 153, 0.5); box-shadow: 0 0 12px rgba(52, 211, 153, 0.2); }
+#island.listening #avatar-svg .cheek { fill: rgba(52, 211, 153, 0.3); opacity: 1; }
+
+#island.thinking #avatar-svg .body { fill: var(--warning); }
+#island.thinking #avatar-glow { border-color: rgba(251, 191, 36, 0.5); box-shadow: 0 0 12px rgba(251, 191, 36, 0.2); }
+#island.thinking #avatar-svg .eye { animation: thinkBlink 2s ease-in-out infinite; }
+@keyframes thinkBlink {
+  0%, 40%, 60%, 100% { ry: 2; }
+  50% { ry: 0.5; }
+}
+#island.thinking #avatar-wrap { animation: thinkBob 1.5s ease-in-out infinite; }
+@keyframes thinkBob {
+  0%, 100% { transform: translateY(0) rotate(0deg); }
+  25% { transform: translateY(-1px) rotate(2deg); }
+  75% { transform: translateY(1px) rotate(-2deg); }
+}
+
+#island.speaking #avatar-svg .body { fill: var(--accent); }
+#island.speaking #avatar-glow { border-color: rgba(124, 92, 255, 0.5); box-shadow: 0 0 12px var(--accent-glow); }
+#island.speaking #avatar-wrap { animation: speakPulse 0.6s ease-in-out infinite; }
+@keyframes speakPulse {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.08); }
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   PILL CONTENT — Label + waveform + preview
+   ═══════════════════════════════════════════════════════════════════ */
+#pill-label {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-secondary);
+  letter-spacing: 0.3px;
+  white-space: nowrap;
+  transition: all 0.3s;
+}
+#island.listening #pill-label,
+#island.thinking #pill-label,
+#island.speaking #pill-label {
+  color: var(--text-primary);
+}
+
+/* Waveform */
+#waveform {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  height: 16px;
+  opacity: 0;
+  width: 0;
+  transition: opacity 0.3s, width 0.3s;
+  overflow: hidden;
+}
+#waveform.active { opacity: 1; width: 28px; }
+#waveform span {
+  width: 2px;
+  height: 4px;
+  background: var(--accent);
+  border-radius: 1px;
+  animation: wave 0.8s ease-in-out infinite;
+}
+#waveform span:nth-child(1) { animation-delay: 0s; }
+#waveform span:nth-child(2) { animation-delay: 0.1s; }
+#waveform span:nth-child(3) { animation-delay: 0.2s; }
+#waveform span:nth-child(4) { animation-delay: 0.3s; }
+#waveform span:nth-child(5) { animation-delay: 0.15s; }
+@keyframes wave {
+  0%, 100% { height: 4px; opacity: 0.4; }
+  50% { height: 12px; opacity: 1; }
+}
+
+/* Preview in collapsed pill */
+#pill-preview-wrap {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 0;
+  opacity: 0;
+  overflow: hidden;
+  transition: max-width 0.45s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.35s;
+}
+#pill.has-preview #pill-preview-wrap {
+  max-width: 200px;
+  opacity: 1;
+}
+#island.expanded #pill-preview-wrap {
+  max-width: 0;
+  opacity: 0;
+}
+#pill-time {
+  font-size: 10px;
+  color: var(--accent-light);
+  flex-shrink: 0;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+}
+#pill-preview {
+  font-size: 11px;
+  color: var(--text-secondary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  flex-shrink: 1;
+  min-width: 0;
+  transition: color 0.3s;
+}
+#pill.has-preview:hover #pill-preview {
+  color: var(--text-primary);
+}
+
+/* Tooltip */
+#pill-tooltip {
+  position: absolute;
+  top: calc(100% + 8px);
+  left: 50%;
+  transform: translateX(-50%);
+  background: var(--surface);
+  border: 1px solid var(--surface-border);
+  border-radius: var(--radius-md);
+  padding: 10px 16px;
+  font-size: 12px;
+  color: var(--text-secondary);
+  max-width: min(420px, 85vw);
+  word-wrap: break-word;
+  white-space: normal;
+  backdrop-filter: blur(30px);
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.5);
+  z-index: 200;
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  transition: opacity 0.2s, visibility 0.2s;
+  line-height: 1.5;
+}
+#pill.has-preview:hover #pill-tooltip { opacity: 1; visibility: visible; }
+#island.expanded #pill-tooltip { opacity: 0 !important; visibility: hidden !important; }
+
+/* ═══════════════════════════════════════════════════════════════════
+   EXPANDED STATE — Chat panel slides down
+   ═══════════════════════════════════════════════════════════════════ */
+#island.expanded #pill {
+  min-width: min(500px, 92vw);
+  height: 52px;
+  border-radius: var(--radius-xl);
+  justify-content: flex-start;
+  padding: 0 18px;
+}
+
+#expanded {
+  max-height: 0;
+  overflow: hidden;
+  transition: max-height 0.5s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.3s;
+  opacity: 0;
+  pointer-events: none;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 0 6px;
+}
+#island.expanded #expanded {
+  max-height: calc(65vh - 60px);
+  opacity: 1;
+  pointer-events: all;
+  margin-top: 10px;
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   MESSAGES
+   ═══════════════════════════════════════════════════════════════════ */
+#msgs {
+  width: min(500px, 92vw);
+  max-height: calc(65vh - 180px);
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px 6px;
+  scrollbar-width: none;
+}
+#msgs::-webkit-scrollbar { display: none; }
+
+.msg {
+  max-width: 82%;
+  padding: 10px 14px;
+  font-size: 13px;
+  line-height: 1.5;
+  animation: msgSlide 0.35s cubic-bezier(0.16, 1, 0.3, 1);
+  position: relative;
+}
+@keyframes msgSlide {
+  from { opacity: 0; transform: translateY(8px) scale(0.97); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+.msg.user {
+  align-self: flex-end;
+  background: rgba(124, 92, 255, 0.12);
+  border: 1px solid rgba(124, 92, 255, 0.15);
+  border-radius: var(--radius-lg) var(--radius-lg) 6px var(--radius-lg);
+  color: var(--text-primary);
+}
+.msg.fol {
+  align-self: flex-start;
+  background: var(--surface);
+  border: 1px solid var(--surface-border);
+  border-radius: var(--radius-lg) var(--radius-lg) var(--radius-lg) 6px;
+  backdrop-filter: blur(20px);
+}
+.msg.fol .nm {
+  font-size: 9px;
+  color: var(--accent-light);
+  font-weight: 600;
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+  margin-bottom: 4px;
+}
+
+/* Typing indicator */
+.typing {
+  display: flex;
+  gap: 4px;
+  padding: 10px 14px;
+  align-items: center;
+}
+.typing span {
+  width: 5px; height: 5px;
+  border-radius: 50%;
+  background: var(--accent);
+  animation: dotBounce 1.2s ease-in-out infinite;
+}
+.typing span:nth-child(2) { animation-delay: 0.15s; }
+.typing span:nth-child(3) { animation-delay: 0.3s; }
+@keyframes dotBounce {
+  0%, 60%, 100% { transform: translateY(0); opacity: 0.4; }
+  30% { transform: translateY(-5px); opacity: 1; }
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   QUICK ACTIONS
+   ═══════════════════════════════════════════════════════════════════ */
+#quick-actions {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 10px;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+.qa-btn {
+  padding: 6px 14px;
+  border-radius: var(--radius-pill);
+  border: 1px solid var(--surface-border);
+  background: var(--surface);
+  color: var(--text-secondary);
+  font-size: 11px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.25s;
+  white-space: nowrap;
+  font-family: inherit;
+  backdrop-filter: blur(20px);
+}
+.qa-btn:hover {
+  background: rgba(124, 92, 255, 0.1);
+  border-color: rgba(124, 92, 255, 0.25);
+  color: var(--accent-light);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(124, 92, 255, 0.15);
+}
+.qa-btn:active {
+  transform: translateY(0) scale(0.97);
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   INPUT BAR
+   ═══════════════════════════════════════════════════════════════════ */
+#input-bar {
+  width: min(500px, 92vw);
+  background: var(--surface);
+  border: 1px solid var(--surface-border);
+  border-radius: var(--radius-xl);
+  padding: 6px 8px 6px 18px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  backdrop-filter: blur(40px) saturate(1.5);
+  box-shadow:
+    0 4px 24px rgba(0, 0, 0, 0.3),
+    0 0 0 0.5px rgba(255, 255, 255, 0.03) inset;
+  transition: border-color 0.3s, box-shadow 0.3s;
+}
+#input-bar:focus-within {
+  border-color: rgba(124, 92, 255, 0.3);
+  box-shadow:
+    0 4px 24px rgba(0, 0, 0, 0.3),
+    0 0 0 1px rgba(124, 92, 255, 0.15) inset,
+    0 0 20px rgba(124, 92, 255, 0.08);
+}
+
+#chat-input {
+  flex: 1;
+  background: transparent;
+  border: none;
+  color: var(--text-primary);
+  font-size: 13px;
+  font-weight: 400;
+  font-family: inherit;
+  outline: none;
+  min-width: 0;
+  padding: 8px 0;
+}
+#chat-input::placeholder { color: var(--text-tertiary); }
+#chat-input:focus { outline: none; }
+
+.icon-btn {
+  width: 34px; height: 34px;
+  border-radius: 50%;
+  border: none;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 13px;
+  transition: all 0.25s;
+  flex-shrink: 0;
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--text-tertiary);
+  font-family: inherit;
+}
+.icon-btn:hover {
+  background: rgba(124, 92, 255, 0.12);
+  color: var(--accent-light);
+  transform: scale(1.08);
+}
+.icon-btn:active {
+  transform: scale(0.95);
+}
+.icon-btn.mic.on {
+  background: rgba(248, 113, 113, 0.2);
+  color: var(--danger);
+  animation: micPulse 1s ease-in-out infinite;
+}
+@keyframes micPulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(248, 113, 113, 0.3); }
+  50% { box-shadow: 0 0 0 6px rgba(248, 113, 113, 0); }
+}
+.icon-btn.send {
+  background: rgba(124, 92, 255, 0.15);
+  color: var(--accent);
+}
+.icon-btn.send:hover {
+  background: rgba(124, 92, 255, 0.25);
+  color: var(--accent-light);
+  box-shadow: 0 0 12px var(--accent-glow);
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   STATUS INDICATOR — Bottom right
+   ═══════════════════════════════════════════════════════════════════ */
+#status-bar {
+  position: fixed;
+  bottom: 20px;
+  right: 20px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 14px;
+  background: var(--surface);
+  border: 1px solid var(--surface-border);
+  border-radius: var(--radius-pill);
+  backdrop-filter: blur(30px);
+  font-size: 11px;
+  color: var(--text-tertiary);
+  z-index: 50;
+  opacity: 0;
+  animation: fadeIn 0.5s ease 1s forwards;
+}
+@keyframes fadeIn { to { opacity: 1; } }
+
+#status-dot {
+  width: 6px; height: 6px;
+  border-radius: 50%;
+  background: var(--text-tertiary);
+  transition: all 0.3s;
+}
+#status-dot.active { background: var(--success); box-shadow: 0 0 8px rgba(52, 211, 153, 0.4); }
+#status-dot.thinking { background: var(--warning); box-shadow: 0 0 8px rgba(251, 191, 36, 0.4); animation: dotPulse 1s infinite; }
+#status-dot.speaking { background: var(--accent); box-shadow: 0 0 8px var(--accent-glow); animation: dotPulse 0.8s infinite; }
+@keyframes dotPulse {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.3); }
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   VERSION TAG
+   ═══════════════════════════════════════════════════════════════════ */
+#version-tag {
+  position: fixed;
+  bottom: 20px;
+  left: 20px;
+  font-size: 10px;
+  color: var(--text-tertiary);
+  letter-spacing: 0.5px;
+  z-index: 50;
+  opacity: 0;
+  animation: fadeIn 0.5s ease 1.2s forwards;
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   SCROLLBAR (for expanded state)
+   ═══════════════════════════════════════════════════════════════════ */
+.msg-content { word-break: break-word; }
+</style>
+</head>
+<body>
+
+<div id="bg"></div>
+<div class="bg-orb"></div>
+<div class="bg-orb"></div>
+<div class="bg-orb"></div>
+
+<!-- ═══ STATUS BAR ═══ -->
+<div id="status-bar">
+  <div id="status-dot"></div>
+  <span id="status-text">Ready</span>
+</div>
+<div id="version-tag">FOL v0.1.0</div>
+
+<!-- ═══ NOTCH ISLAND ═══ -->
+<div id="notch-area">
+  <div id="island">
+    <div id="pill">
+      <!-- Animated Avatar -->
+      <div id="avatar-wrap">
+        <div id="avatar-glow"></div>
+        <svg id="avatar-svg" viewBox="0 0 28 28" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <!-- Body (blob shape) -->
+          <ellipse class="body" cx="14" cy="15" rx="10" ry="11" />
+          <!-- Face highlights -->
+          <ellipse class="cheek" cx="8" cy="16" rx="2.5" ry="1.5" />
+          <ellipse class="cheek" cx="20" cy="16" rx="2.5" ry="1.5" />
+          <!-- Eyes -->
+          <ellipse class="eye" cx="10.5" cy="14" rx="1.8" ry="2" />
+          <ellipse class="eye" cx="17.5" cy="14" rx="1.8" ry="2" />
+          <!-- Eye shine -->
+          <circle cx="11.2" cy="13.3" r="0.6" fill="white" opacity="0.8" />
+          <circle cx="18.2" cy="13.3" r="0.6" fill="white" opacity="0.8" />
+          <!-- Smile -->
+          <path d="M11 17.5 Q14 19.5 17 17.5" stroke="white" stroke-width="0.8" fill="none" stroke-linecap="round" opacity="0.7" />
+          <!-- Tiny antenna -->
+          <line x1="14" y1="4" x2="14" y2="2" stroke="var(--accent)" stroke-width="1" stroke-linecap="round" opacity="0.5" />
+          <circle cx="14" cy="1.5" r="1" fill="var(--accent)" opacity="0.6" />
+        </svg>
+      </div>
+
+      <!-- Waveform -->
+      <div id="waveform">
+        <span></span><span></span><span></span><span></span><span></span>
+      </div>
+
+      <!-- Label -->
+      <span id="pill-label">FOL</span>
+
+      <!-- Preview -->
+      <div id="pill-preview-wrap">
+        <span id="pill-time">--:--</span>
+        <span id="pill-preview"></span>
+      </div>
+    </div>
+    <div id="pill-tooltip"></div>
+
+    <!-- Expanded Chat Panel -->
+    <div id="expanded">
+      <div id="msgs"></div>
+      <div id="quick-actions">
+        <button class="qa-btn" data-cmd="сделай скриншот">📸 Скриншот</button>
+        <button class="qa-btn" data-cmd="что на экране">👁 Что на экране</button>
+        <button class="qa-btn" data-cmd="открой браузер">🌐 Браузер</button>
+        <button class="qa-btn" data-cmd="включи музыку">🎵 Музыка</button>
+        <button class="qa-btn" data-cmd="статус">⚙️ Статус</button>
+        <button class="qa-btn" data-cmd="помощь">❓ Помощь</button>
+      </div>
+      <div id="input-bar">
+        <input type="text" id="chat-input" placeholder="Спроси что-нибудь..." autocomplete="off" spellcheck="false">
+        <button class="icon-btn mic" id="mic" title="Голос">🎤</button>
+        <button class="icon-btn send" id="send" title="Отправить">▶</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+/* ═══════════════════════════════════════════════════════════════════
+   FOL Interface
+   ═══════════════════════════════════════════════════════════════════ */
+
+const $ = id => document.getElementById(id);
+const island = $('island');
+const pill = $('pill');
+const msgs = $('msgs');
+const input = $('chat-input');
+const micBtn = $('mic');
+const sendBtn = $('send');
+const statusDot = $('status-dot');
+const statusText = $('status-text');
+const waveform = $('waveform');
+const pillPreview = $('pill-preview');
+const pillTooltip = $('pill-tooltip');
+const pillTime = $('pill-time');
+
+let expanded = false;
+let listening = false;
+let rec = null;
+let speaking = false;
+let lastFolMsg = '';
+let lastFolTime = '';
+let userInteracted = false;
+
+/* ─── State Management ────────────────────────────────────────── */
+function setState(state) {
+  island.classList.remove('listening', 'thinking', 'speaking');
+  statusDot.className = '';
+  statusText.textContent = 'Ready';
+
+  if (state === 'listening') {
+    island.classList.add('listening');
+    statusDot.className = 'active';
+    statusText.textContent = 'Listening...';
+  } else if (state === 'thinking') {
+    island.classList.add('thinking');
+    statusDot.className = 'thinking';
+    statusText.textContent = 'Thinking...';
+  } else if (state === 'speaking') {
+    island.classList.add('speaking');
+    statusDot.className = 'speaking';
+    statusText.textContent = 'Speaking...';
+  }
+}
+
+/* ─── Expand / Collapse ───────────────────────────────────────── */
+pill.addEventListener('click', () => {
+  expanded = !expanded;
+  island.classList.toggle('expanded', expanded);
+  updatePreviewVisibility();
+  if (expanded) {
+    setTimeout(() => input.focus(), 400);
+  } else {
+    input.blur();
+  }
+});
+
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape' && expanded) {
+    expanded = false;
+    island.classList.remove('expanded');
+    updatePreviewVisibility();
+  }
+});
+
+/* ─── Speech Recognition ──────────────────────────────────────── */
+function initRec() {
+  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if (!SR) return null;
+  const r = new SR();
+  r.continuous = false;
+  r.interimResults = false;
+  r.lang = 'ru-RU';
+  r.onresult = e => {
+    const t = e.results[0][0].transcript;
+    addMsg(t, 'user');
+    process(t);
+  };
+  r.onend = () => setState('');
+  r.onerror = () => setState('');
+  return r;
+}
+
+if ('speechSynthesis' in window) {
+  speechSynthesis.onvoiceschanged = () => speechSynthesis.getVoices();
+  speechSynthesis.getVoices();
+}
+
+/* ─── Messages ────────────────────────────────────────────────── */
+function addMsg(text, type) {
+  const d = document.createElement('div');
+  d.className = `msg ${type}`;
+  if (type === 'fol') {
+    d.innerHTML = `<div class="nm">FOL</div><div class="msg-content">${escapeHtml(text)}</div>`;
+    if (userInteracted) {
+      lastFolMsg = text;
+      lastFolTime = formatTime(new Date());
+      updatePillPreview(text);
+    }
+  } else {
+    d.textContent = text;
+    userInteracted = true;
+  }
+  msgs.appendChild(d);
+  msgs.scrollTop = msgs.scrollHeight;
+}
+
+function formatTime(date) {
+  return date.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
+}
+
+function updatePillPreview(text) {
+  if (!text || expanded) return;
+  const clean = text.replace(/\n/g, ' ').trim();
+  pillPreview.textContent = clean;
+  pillTooltip.textContent = text.trim();
+  pillTime.textContent = lastFolTime;
+  pill.classList.add('has-preview');
+}
+
+function updatePreviewVisibility() {
+  if (!expanded && lastFolMsg) {
+    updatePillPreview(lastFolMsg);
+  } else {
+    pill.classList.remove('has-preview');
+  }
+}
+
+function escapeHtml(t) {
+  return t.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/\n/g, '<br>');
+}
+
+function showTyping() {
+  const d = document.createElement('div');
+  d.className = 'msg fol';
+  d.id = 'typ';
+  d.innerHTML = '<div class="nm">FOL</div><div class="typing"><span></span><span></span><span></span></div>';
+  msgs.appendChild(d);
+  msgs.scrollTop = msgs.scrollHeight;
+}
+
+function hideTyping() {
+  document.getElementById('typ')?.remove();
+}
+
+/* ─── Process Message ─────────────────────────────────────────── */
+async function process(text) {
+  setState('thinking');
+  showTyping();
+  try {
+    const r = await fetch('/api/chat', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ message: text })
+    });
+    const data = await r.json();
+    hideTyping();
+    setState('speaking');
+    addMsg(data.response, 'fol');
+    speakResponse(data.response);
+  } catch (e) {
+    hideTyping();
+    setState('');
+    addMsg('Ошибка соединения. Проверь, запущен ли сервер.', 'fol');
+  }
+}
+
+function speakResponse(text) {
+  if (!('speechSynthesis' in window)) {
+    setState('');
+    return;
+  }
+  speechSynthesis.cancel();
+  const u = new SpeechSynthesisUtterance(text.substring(0, 600));
+  u.lang = 'ru-RU';
+  u.rate = 0.92;
+  u.pitch = 0.88;
+  u.volume = 1.0;
+  const voices = speechSynthesis.getVoices();
+  const v = voices.find(v => v.name.includes('Daniel') || v.name.includes('Alex') || v.name.includes('Milena'));
+  if (v) u.voice = v;
+  u.onstart = () => setState('speaking');
+  u.onend = () => setState('');
+  u.onerror = () => setState('');
+  speechSynthesis.speak(u);
+}
+
+function sendMsg(text) {
+  addMsg(text, 'user');
+  process(text);
+}
+
+/* ─── Quick Actions ───────────────────────────────────────────── */
+document.querySelectorAll('.qa-btn').forEach(btn => {
+  btn.addEventListener('click', e => {
+    e.stopPropagation();
+    sendMsg(btn.dataset.cmd);
+  });
+});
+
+/* ─── Input Events ────────────────────────────────────────────── */
+sendBtn.addEventListener('click', e => {
+  e.stopPropagation();
+  const t = input.value.trim();
+  if (!t) return;
+  input.value = '';
+  sendMsg(t);
+});
+
+input.addEventListener('keydown', e => {
+  if (e.key === 'Enter') { e.stopPropagation(); sendBtn.click(); }
+});
+input.addEventListener('click', e => e.stopPropagation());
+
+micBtn.addEventListener('click', e => {
+  e.stopPropagation();
+  if (listening) { rec?.stop(); return; }
+  if (!rec) {
+    rec = initRec();
+    if (!rec) {
+      addMsg('Речь не поддерживается в этом браузере.', 'fol');
+      return;
+    }
+  }
+  listening = true;
+  micBtn.classList.add('on');
+  setState('listening');
+  rec.start();
+});
+
+/* ─── Init ────────────────────────────────────────────────────── */
+setTimeout(() => addMsg('Привет! Я FOL — твой второй себя. Чем могу помочь?', 'fol'), 600);
+</script>
+</body>
+</html>

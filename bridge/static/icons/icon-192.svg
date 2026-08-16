@@ -1,0 +1,81 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="192" height="192" viewBox="0 0 192 192">
+  <defs>
+    <style>
+      @keyframes pulse-node {
+        0%, 100% { transform: scale(1); opacity: 0.9; }
+        50% { transform: scale(1.25); opacity: 1; }
+      }
+      @keyframes pulse-glow {
+        0%, 100% { opacity: 0.15; }
+        50% { opacity: 0.35; }
+      }
+      @keyframes breathe-ring {
+        0%, 100% { opacity: 0.25; stroke-width: 0.5; }
+        50% { opacity: 0.5; stroke-width: 1; }
+      }
+      @keyframes blink-eyes {
+        0%, 95%, 100% { transform: scaleY(1); }
+        97% { transform: scaleY(0.1); }
+      }
+      .center-node { animation: pulse-node 2.5s ease-in-out infinite; transform-origin: 96px 96px; }
+      .glow-ellipse { animation: pulse-glow 3s ease-in-out infinite; }
+      .outer-ring { animation: breathe-ring 4s ease-in-out infinite; transform-origin: 96px 96px; }
+      .eyes { animation: blink-eyes 4s ease-in-out infinite; transform-origin: 96px 56px; }
+    </style>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#1a1a1d"/>
+      <stop offset="100%" stop-color="#0d0d0f"/>
+    </linearGradient>
+    <linearGradient id="glow" x1="0" y1="0" x2="0.5" y2="1">
+      <stop offset="0%" stop-color="#b5b055" stop-opacity="0.3"/>
+      <stop offset="100%" stop-color="#9ca161" stop-opacity="0"/>
+    </linearGradient>
+    <linearGradient id="accent" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#b5b055"/>
+      <stop offset="100%" stop-color="#9ca161"/>
+    </linearGradient>
+  </defs>
+
+  <!-- Background circle -->
+  <circle cx="96" cy="96" r="92" fill="url(#bg)" stroke="#9ca161" stroke-width="1.5" opacity="0.6"/>
+
+  <!-- Subtle glow -->
+  <ellipse class="glow-ellipse" cx="96" cy="96" rx="70" ry="60" fill="url(#glow)"/>
+
+  <!-- DNA/Twin helix - left strand -->
+  <g fill="none" stroke="url(#accent)" stroke-width="3.5" stroke-linecap="round">
+    <!-- Left helix -->
+    <path d="M72 48 C62 72, 62 96, 72 120 C82 144, 82 168, 72 192" opacity="0.5"/>
+    <path d="M72 48 C72 56, 66 64, 60 72 C54 80, 54 88, 60 96 C66 104, 66 112, 60 120 C54 128, 54 136, 60 144 C66 152, 66 160, 60 168" opacity="0.35"/>
+
+    <!-- Right helix -->
+    <path d="M120 48 C130 72, 130 96, 120 120 C110 144, 110 168, 120 192" opacity="0.5"/>
+    <path d="M120 48 C120 56, 126 64, 132 72 C138 80, 138 88, 132 96 C126 104, 126 112, 132 120 C138 128, 138 136, 132 144 C126 152, 126 160, 132 168" opacity="0.35"/>
+
+    <!-- Connecting bridges -->
+    <line x1="70" y1="72" x2="122" y2="72" opacity="0.6"/>
+    <line x1="62" y1="96" x2="130" y2="96" opacity="0.8" stroke-width="4"/>
+    <line x1="70" y1="120" x2="122" y2="120" opacity="0.6"/>
+    <line x1="62" y1="144" x2="130" y2="144" opacity="0.5"/>
+
+    <!-- Nodes on bridges -->
+    <circle cx="72" cy="72" r="3" fill="url(#accent)" stroke="none" opacity="0.6"/>
+    <circle cx="120" cy="72" r="3" fill="url(#accent)" stroke="none" opacity="0.6"/>
+    <circle cx="72" cy="120" r="3" fill="url(#accent)" stroke="none" opacity="0.6"/>
+    <circle cx="120" cy="120" r="3" fill="url(#accent)" stroke="none" opacity="0.6"/>
+    <circle cx="72" cy="144" r="2.5" fill="url(#accent)" stroke="none" opacity="0.5"/>
+    <circle cx="120" cy="144" r="2.5" fill="url(#accent)" stroke="none" opacity="0.5"/>
+  </g>
+
+  <!-- Pulsing center node -->
+  <circle class="center-node" cx="96" cy="96" r="7" fill="url(#accent)" stroke="#c4be6a" stroke-width="1" opacity="0.9"/>
+
+  <!-- Digital twin face - simple minimalist eyes -->
+  <g class="eyes" opacity="0.8">
+    <ellipse cx="82" cy="56" rx="3.5" ry="4" fill="#9ca161"/>
+    <ellipse cx="110" cy="56" rx="3.5" ry="4" fill="#9ca161"/>
+  </g>
+
+  <!-- Outer ring highlight -->
+  <circle class="outer-ring" cx="96" cy="96" r="90" fill="none" stroke="url(#accent)" stroke-width="0.5" opacity="0.3"/>
+</svg>

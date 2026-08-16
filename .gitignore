@@ -1,0 +1,103 @@
+# Secrets — real config with API keys must never be committed.
+# Templates (.env.example / .env.template) have empty keys and ARE committed
+# so a fresh clone can configure FOL in minutes.
+.env
+.env.local
+.env.*.local
+.env.bak
+.env.old
+.env.production
+.env.production.local
+.env.development
+.env.development.local
+!.env.example
+!.env.template
+firebase-service-account.json
+.session_store.json
+.profile_cache.json
+.sdk_session_map.json
+
+# Output / cache (root-level only — fol/modules/output is the canonical
+# Output boundary and must stay trackable)
+/output/
+!/output/.gitkeep
+
+# Runtime state (contains OAuth tokens, user data, conversation history)
+.session_store.json
+.chat_history.json
+.profile_cache.json
+.rich_profile_cache.json
+.sdk_session_map.json
+
+# Memory
+.claude-memory.md
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.egg-info/
+dist/
+.eggs/
+.coverage
+.pytest_cache/
+htmlcov/
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# IDE / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+*.err
+.gstack/
+
+# Swift build (FOL + SecondSelf)
+.build/
+.swiftpm/
+*.xcuserstate
+xcuserdata/
+DerivedData/
+
+# Build artifacts
+build/
+tsconfig.tsbuildinfo
+*.pkg
+*.dmg
+Release/
+
+# Next.js
+.next/
+out/
+node_modules/
+npm-debug.log*
+.vercel
+
+# Hypothesis test cache
+.hypothesis/
+
+# FOL specific
+fol/.build/
+fol/htmlcov/
+fol/.pytest_cache/
+fol/.coverage
+fol/dist/
+fol/.venv/
+fol/scripts/com.fol.assistant.plist
+
+# FOL vault
+fol/.secondself/
+fol/fol/.secondself/
+fol/.coverage 2
+
+# Runtime state (episodic memory, benchmark results — generated, not source)
+orchestrator/output/
+benchmark/results.jsonl

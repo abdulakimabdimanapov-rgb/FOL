@@ -1,0 +1,37 @@
+# Secrets — never bake API keys into an image
+.env
+.env.local
+.env.*.local
+
+# VCS
+.git
+.gitignore
+.github
+
+# Node / Next.js
+node_modules
+.next
+public
+src/app
+
+# Python artifacts
+__pycache__
+*.pyc
+.pytest_cache
+.hypothesis
+.coverage
+build/
+output/
+fol/.coverage*
+
+# macOS build artifacts
+*.wav
+*.pkg
+*.dmg
+*.app
+SecondSelf/.build
+SecondSelf/build
+
+# Local data
+*.log
+.DS_Store

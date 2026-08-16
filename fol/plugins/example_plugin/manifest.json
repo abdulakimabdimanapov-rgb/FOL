@@ -1,0 +1,9 @@
+{
+    "name": "hello-world",
+    "version": "0.1.0",
+    "description": "Example FOL plugin — greets the user",
+    "author": "FOL Team",
+    "min_fol_version": "0.1.0",
+    "dependencies": [],
+    "tools": []
+}

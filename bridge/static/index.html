@@ -1,0 +1,628 @@
+<!DOCTYPE html>
+<html lang="ru" manifest="manifest.json">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <meta name="theme-color" content="#111113">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="FOL">
+  <link rel="apple-touch-icon" href="/icons/icon-192.svg" sizes="192x192">
+  <link rel="icon" type="image/svg+xml" href="/icons/icon-192.svg" sizes="192x192">
+  <title>FOL — Mobile</title>
+  <style>
+    /* ── Reset & Base ── */
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    html, body {
+      height: 100%;
+      overflow: hidden;
+      font-family: -apple-system, BlinkMacSystemFont, "SF Pro", "Helvetica Neue", sans-serif;
+      background: #111113;
+      color: #f5f5f7;
+      -webkit-font-smoothing: antialiased;
+      -webkit-tap-highlight-color: transparent;
+    }
+
+    /* ── Layout ── */
+    .app {
+      display: flex;
+      flex-direction: column;
+      height: 100dvh;
+      max-width: 480px;
+      margin: 0 auto;
+      padding: 0 env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
+    }
+
+    /* ── Status Bar ── */
+    .status-bar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 12px 16px 8px;
+      padding-top: max(12px, env(safe-area-inset-top));
+      font-size: 11px;
+      color: #8e8e93;
+      border-bottom: 0.5px solid rgba(255,255,255,0.06);
+    }
+    .status-bar .left { display: flex; align-items: center; gap: 8px; }
+    .status-bar .right { display: flex; align-items: center; gap: 6px; }
+    .status-dot {
+      width: 7px; height: 7px; border-radius: 50%;
+      transition: background 0.3s;
+    }
+    .status-dot.connected { background: #9ca161; }
+    .status-dot.disconnected { background: #ff453a; }
+    .status-dot.thinking { background: #ffd60a; animation: pulse 0.8s infinite; }
+    .status-badge {
+      font-size: 9px;
+      padding: 2px 7px;
+      border-radius: 10px;
+      background: rgba(255,255,255,0.06);
+      color: #8e8e93;
+      letter-spacing: 0.3px;
+    }
+
+    @keyframes pulse {
+      0%, 100% { opacity: 0.4; }
+      50% { opacity: 1; }
+    }
+
+    /* ── Dynamic Notch ── */
+    .notch-area {
+      display: flex;
+      justify-content: center;
+      padding: 4px 0 8px;
+    }
+    .notch-pill {
+      width: 120px;
+      height: 26px;
+      background: #1c1c1e;
+      border-radius: 13px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      font-size: 10px;
+      color: #8e8e93;
+      border: 0.5px solid rgba(255,255,255,0.08);
+      transition: all 0.3s ease;
+    }
+    .notch-pill.active {
+      background: #9ca161;
+      color: #111113;
+      width: 140px;
+    }
+    .notch-pill .pulse-dot {
+      width: 5px; height: 5px;
+      border-radius: 50%;
+      background: #9ca161;
+      opacity: 0;
+      transition: opacity 0.3s;
+    }
+    .notch-pill.active .pulse-dot {
+      opacity: 1;
+      animation: pulse 1s infinite;
+      background: #111113;
+    }
+
+    /* ── Messages ── */
+    .messages {
+      flex: 1;
+      overflow-y: auto;
+      padding: 12px 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      scroll-behavior: smooth;
+      -webkit-overflow-scrolling: touch;
+    }
+    .messages::-webkit-scrollbar { width: 3px; }
+    .messages::-webkit-scrollbar-thumb { background: #333; border-radius: 3px; }
+
+    .message {
+      max-width: 88%;
+      padding: 10px 14px;
+      border-radius: 18px;
+      font-size: 15px;
+      line-height: 1.45;
+      word-wrap: break-word;
+      animation: msgIn 0.25s ease-out;
+    }
+    @keyframes msgIn {
+      from { opacity: 0; transform: translateY(6px) scale(0.97); }
+      to { opacity: 1; transform: translateY(0) scale(1); }
+    }
+
+    .message.user {
+      align-self: flex-end;
+      background: #9ca161;
+      color: #111113;
+      border-bottom-right-radius: 6px;
+    }
+    .message.twin {
+      align-self: flex-start;
+      background: #1c1c1e;
+      color: #f5f5f7;
+      border-bottom-left-radius: 6px;
+    }
+    .message.twin.thinking {
+      padding: 10px 18px;
+    }
+
+    .tool-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      align-self: flex-start;
+      background: rgba(156, 161, 97, 0.12);
+      border: 0.5px solid rgba(156, 161, 97, 0.3);
+      border-radius: 20px;
+      padding: 5px 12px;
+      font-size: 12px;
+      color: #9ca161;
+      animation: msgIn 0.2s ease-out;
+      margin: -4px 0;
+    }
+    .tool-pill .dot {
+      width: 6px; height: 6px;
+      border-radius: 50%;
+      background: #9ca161;
+      animation: pulse 0.8s infinite;
+    }
+
+    .typing-indicator {
+      align-self: flex-start;
+      display: flex;
+      gap: 5px;
+      padding: 14px 20px;
+      background: #1c1c1e;
+      border-radius: 18px;
+      border-bottom-left-radius: 6px;
+    }
+    .typing-indicator span {
+      width: 7px; height: 7px;
+      border-radius: 50%;
+      background: #8e8e93;
+      animation: typingBounce 1.2s infinite;
+    }
+    .typing-indicator span:nth-child(2) { animation-delay: 0.2s; }
+    .typing-indicator span:nth-child(3) { animation-delay: 0.4s; }
+    @keyframes typingBounce {
+      0%, 60%, 100% { transform: translateY(0); }
+      30% { transform: translateY(-6px); }
+    }
+
+    /* ── Memory / Status cards ── */
+    .status-card {
+      background: rgba(255,255,255,0.04);
+      border: 0.5px solid rgba(255,255,255,0.08);
+      border-radius: 14px;
+      padding: 12px 14px;
+      font-size: 12px;
+      color: #8e8e93;
+      line-height: 1.5;
+      animation: msgIn 0.3s ease-out;
+    }
+    .status-card .key {
+      color: #9ca161;
+      font-weight: 500;
+    }
+
+    /* ── Input Area ── */
+    .input-area {
+      display: flex;
+      gap: 8px;
+      padding: 10px 16px;
+      padding-bottom: max(10px, env(safe-area-inset-bottom));
+      border-top: 0.5px solid rgba(255,255,255,0.06);
+      background: #111113;
+    }
+    .input-area input {
+      flex: 1;
+      background: #1c1c1e;
+      border: 0.5px solid rgba(255,255,255,0.08);
+      border-radius: 20px;
+      padding: 10px 16px;
+      font-size: 15px;
+      color: #f5f5f7;
+      outline: none;
+      transition: border-color 0.2s;
+    }
+    .input-area input:focus {
+      border-color: #9ca161;
+    }
+    .input-area input::placeholder {
+      color: #555;
+    }
+    .input-area input:disabled {
+      opacity: 0.4;
+    }
+    .send-btn {
+      width: 40px;
+      height: 40px;
+      border-radius: 50%;
+      border: none;
+      background: #9ca161;
+      color: #111113;
+      font-size: 18px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      transition: all 0.15s;
+      flex-shrink: 0;
+    }
+    .send-btn:active { transform: scale(0.9); }
+    .send-btn:disabled { opacity: 0.3; transform: none; }
+
+    /* ── Empty state ── */
+    .empty-state {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      flex: 1;
+      gap: 8px;
+      opacity: 0.5;
+      text-align: center;
+      padding: 40px;
+    }
+    .empty-state .icon { font-size: 36px; margin-bottom: 8px; }
+    .empty-state h2 { font-size: 18px; font-weight: 600; color: #f5f5f7; }
+    .empty-state p { font-size: 13px; color: #8e8e93; }
+  </style>
+</head>
+<body>
+  <div class="app" id="app">
+    <!-- Status Bar -->
+    <div class="status-bar">
+      <div class="left">
+        <span class="status-dot disconnected" id="statusDot"></span>
+        <span id="statusLabel">disconnected</span>
+      </div>
+      <div class="right">
+        <span class="status-badge" id="orchestratorBadge">orchestrator...</span>
+        <span class="status-badge" id="memoryBadge">memory local</span>
+      </div>
+    </div>
+
+    <!-- Notch -->
+    <div class="notch-area">
+      <div class="notch-pill" id="notchPill">
+        <span class="pulse-dot"></span>
+        second self
+      </div>
+    </div>
+
+    <!-- Messages -->
+    <div class="messages" id="messages">
+      <div class="empty-state" id="emptyState">
+        <div class="icon">🧬</div>
+        <h2>your second self</h2>
+        <p>connect to start chatting with your twin</p>
+      </div>
+    </div>
+
+    <!-- Input -->
+    <div class="input-area">
+      <input
+        type="text"
+        id="messageInput"
+        placeholder="Message your twin..."
+        disabled
+        autocomplete="off"
+        autocorrect="on"
+      />
+      <button class="send-btn" id="sendBtn" disabled>&uarr;</button>
+    </div>
+  </div>
+
+  <script>
+    // ─── State ─────────────────────────────────────────
+    const state = {
+      ws: null,
+      connected: false,
+      thinking: false,
+      reconnectTimer: null,
+    };
+
+    // ─── DOM refs ─────────────────────────────────────
+    const $ = (id) => document.getElementById(id);
+    const messagesEl = $("messages");
+    const inputEl = $("messageInput");
+    const sendBtn = $("sendBtn");
+    const statusDot = $("statusDot");
+    const statusLabel = $("statusLabel");
+    const notchPill = $("notchPill");
+    const emptyState = $("emptyState");
+
+    // ─── WebSocket ─────────────────────────────────────
+    function getWsUrl() {
+      const protocol = location.protocol === "https:" ? "wss:" : "ws:";
+      return `${protocol}//${location.host}/ws`;
+    }
+
+    function connect() {
+      if (state.ws && (state.ws.readyState === WebSocket.OPEN || state.ws.readyState === WebSocket.CONNECTING)) {
+        return;
+      }
+
+      const url = getWsUrl();
+      console.log("[bridge] Connecting to", url);
+      
+      state.ws = new WebSocket(url);
+      
+      state.ws.onopen = () => {
+        console.log("[bridge] Connected");
+        state.connected = true;
+        updateStatus("connected");
+        inputEl.disabled = false;
+        sendBtn.disabled = false;
+        inputEl.focus();
+        addSystemMessage("Connected to your twin");
+        clearTimeout(state.reconnectTimer);
+      };
+
+      state.ws.onclose = () => {
+        console.log("[bridge] Disconnected");
+        state.connected = false;
+        state.thinking = false;
+        updateStatus("disconnected");
+        inputEl.disabled = true;
+        sendBtn.disabled = true;
+        removeTypingIndicator();
+        
+        // Auto-reconnect
+        state.reconnectTimer = setTimeout(() => {
+          addSystemMessage("Reconnecting...");
+          connect();
+        }, 3000);
+      };
+
+      state.ws.onerror = (err) => {
+        console.error("[bridge] Error:", err);
+      };
+
+      state.ws.onmessage = (event) => {
+        try {
+          const msg = JSON.parse(event.data);
+          handleMessage(msg);
+        } catch (e) {
+          console.error("[bridge] Parse error:", e);
+        }
+      };
+    }
+
+    // ─── Message Handler ──────────────────────────────
+    function handleMessage(msg) {
+      const type = msg.type;
+
+      switch (type) {
+        case "token":
+          removeEmptyState();
+          removeTypingIndicator();
+          appendToken(msg.text);
+          break;
+
+        case "state":
+          if (msg.state === "thinking") {
+            state.thinking = true;
+            updateStatus("thinking");
+            removeEmptyState();
+            addTypingIndicator();
+          } else if (msg.state === "working") {
+            state.thinking = true;
+            updateStatus("thinking");
+          } else if (msg.state === "complete") {
+            state.thinking = false;
+            updateStatus("connected");
+            removeTypingIndicator();
+            finalizeMessage();
+            if (msg.message) {
+              appendTwinMessage(msg.message);
+            }
+          } else if (msg.state === "error") {
+            state.thinking = false;
+            updateStatus("connected");
+            removeTypingIndicator();
+          }
+          break;
+
+        case "tool_call":
+        case "tool_result":
+        case "tool_progress":
+          // Tool calls are internal actions — never surface tool names,
+          // arguments, or JSON to the user.
+          break;
+
+        case "activity":
+          // Coarse, user-safe status from the Response Formatter.
+          removeEmptyState();
+          if (msg.label) {
+            updateStatus("thinking");
+            statusLabel.textContent = msg.label;
+          }
+          break;
+
+        case "component":
+          // A2UI component — show a card
+          removeEmptyState();
+          if (msg.a2ui && msg.a2ui.components) {
+            for (const comp of msg.a2ui.components) {
+              if (comp.type === "TaskApproval" || comp.type === "ConfirmAction") {
+                addComponentCard(comp);
+              }
+            }
+          }
+          break;
+
+        case "system":
+          addSystemMessage(msg.message);
+          if (msg.orchestrator) {
+            updateOrchestratorBadge(msg.orchestrator);
+          }
+          break;
+
+        case "error":
+          addSystemMessage("Error: " + msg.message, true);
+          break;
+
+        case "pong":
+          break;
+
+        default:
+          console.log("[bridge] Unknown message type:", type, msg);
+      }
+    }
+
+    // ─── UI Updates ───────────────────────────────────
+    function updateStatus(connectionState) {
+      statusDot.className = "status-dot " + connectionState;
+      const labels = {
+        connected: "connected",
+        disconnected: "disconnected",
+        thinking: "thinking...",
+      };
+      statusLabel.textContent = labels[connectionState] || connectionState;
+      notchPill.className = "notch-pill" + (connectionState === "thinking" ? " active" : "");
+    }
+
+    function updateOrchestratorBadge(health) {
+      const badge = $("orchestratorBadge");
+      if (health && health.status === "ok") {
+        badge.textContent = "orchestrator ✓";
+        badge.style.color = "#9ca161";
+      } else {
+        badge.textContent = "orchestrator ✗";
+        badge.style.color = "#ff453a";
+      }
+    }
+
+    function removeEmptyState() {
+      if (emptyState && emptyState.parentNode) {
+        emptyState.remove();
+      }
+    }
+
+    // ─── Messages ──────────────────────────────────────
+    let currentMessageEl = null;
+    let messageBuffer = "";
+
+    function appendToken(text) {
+      if (!currentMessageEl || currentMessageEl.dataset.finalized === "true") {
+        currentMessageEl = document.createElement("div");
+        currentMessageEl.className = "message twin";
+        messagesEl.appendChild(currentMessageEl);
+        messageBuffer = "";
+      }
+      messageBuffer += text;
+      currentMessageEl.textContent = messageBuffer;
+      scrollToBottom();
+    }
+
+    function finalizeMessage() {
+      if (currentMessageEl) {
+        currentMessageEl.dataset.finalized = "true";
+        currentMessageEl = null;
+      }
+    }
+
+    function appendTwinMessage(text) {
+      const el = document.createElement("div");
+      el.className = "message twin";
+      el.textContent = text;
+      messagesEl.appendChild(el);
+      scrollToBottom();
+    }
+
+    function appendUserMessage(text) {
+      removeEmptyState();
+      const el = document.createElement("div");
+      el.className = "message user";
+      el.textContent = text;
+      messagesEl.appendChild(el);
+      scrollToBottom();
+    }
+
+    function addSystemMessage(text, isError = false) {
+      const el = document.createElement("div");
+      el.className = "status-card";
+      if (isError) {
+        el.style.borderColor = "rgba(255,69,58,0.3)";
+        el.style.color = "#ff453a";
+      }
+      el.textContent = text;
+      messagesEl.appendChild(el);
+      scrollToBottom();
+    }
+
+
+    function addComponentCard(comp) {
+      const el = document.createElement("div");
+      el.className = "status-card";
+      const props = comp.properties || {};
+      if (comp.type === "TaskApproval" && props.steps) {
+        el.innerHTML = `<span class="key">Plan:</span> ${props.title || "Task"}<br>`;
+        props.steps.forEach((s) => {
+          el.innerHTML += `&nbsp;&nbsp;${s.id}. ${s.text}<br>`;
+        });
+      } else if (comp.type === "ConfirmAction") {
+        el.innerHTML = `<span class="key">Confirm:</span> ${props.action || "Action"}`;
+      } else {
+        el.innerHTML = `<span class="key">${comp.type}:</span> ${JSON.stringify(props).slice(0, 100)}`;
+      }
+      messagesEl.appendChild(el);
+      scrollToBottom();
+    }
+
+    function addTypingIndicator() {
+      removeTypingIndicator();
+      const el = document.createElement("div");
+      el.className = "typing-indicator";
+      el.id = "typingIndicator";
+      el.innerHTML = "<span></span><span></span><span></span>";
+      messagesEl.appendChild(el);
+      scrollToBottom();
+    }
+
+    function removeTypingIndicator() {
+      const el = document.getElementById("typingIndicator");
+      if (el) el.remove();
+    }
+
+    function scrollToBottom() {
+      requestAnimationFrame(() => {
+        messagesEl.scrollTop = messagesEl.scrollHeight;
+      });
+    }
+
+    // ─── Send Message ─────────────────────────────────
+    function sendMessage(text) {
+      if (!state.connected || state.thinking || !text.trim()) return;
+
+      appendUserMessage(text);
+      inputEl.value = "";
+
+      state.ws.send(JSON.stringify({
+        type: "chat",
+        text: text.trim(),
+      }));
+    }
+
+    // ─── Event Listeners ──────────────────────────────
+    inputEl.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") {
+        e.preventDefault();
+        sendMessage(inputEl.value);
+      }
+    });
+
+    sendBtn.addEventListener("click", () => {
+      sendMessage(inputEl.value);
+    });
+
+    // ─── Init ──────────────────────────────────────────
+    connect();
+  </script>
+</body>
+</html>

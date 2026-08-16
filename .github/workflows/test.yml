@@ -1,0 +1,92 @@
+name: Test
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  python-tests-linux:
+    name: Python tests (Linux, core deps)
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ["3.11"]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: pip
+
+      - name: Install core dependencies
+        run: |
+          pip install -r requirements-core.txt
+          pip install pytest-xdist pytest-asyncio httpx
+
+      - name: Run test suite
+        run: |
+          python -m pytest tests/ -n auto -q --tb=short
+        env:
+          # Empty on forks; tests that require live keys skip themselves.
+          TAVILY_API_KEY: ${{ secrets.TAVILY_API_KEY }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+
+  python-tests-macos:
+    name: Python tests (macOS, full deps)
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install full dependencies
+        run: |
+          pip install -r requirements.txt
+          pip install pytest-asyncio
+      - name: Run test suite
+        run: |
+          python -m pytest tests/ -n auto -q --tb=short
+        env:
+          TAVILY_API_KEY: ${{ secrets.TAVILY_API_KEY }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+
+  typecheck:
+    name: Python syntax check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Verify all Python files parse
+        run: |
+          python -c "
+          import ast, pathlib, sys
+          bad = []
+          for p in pathlib.Path('.').rglob('*.py'):
+              if any(part in p.parts for part in ('.git', 'node_modules', '.next', 'build', '.pytest_cache', '.hypothesis')):
+                  continue
+              try:
+                  ast.parse(p.read_text(encoding='utf-8'))
+              except Exception as e:
+                  bad.append((str(p), str(e)))
+          if bad:
+              for p, e in bad:
+                  print(f'FAIL {p}: {e}')
+              sys.exit(1)
+          print('All Python files parse OK')
+          "
+
+  swift-build:
+    name: SwiftUI build (macOS)
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build SwiftUI app
+        run: |
+          cd SecondSelf
+          swift build
+        timeout-minutes: 20

@@ -1,0 +1,29 @@
+# FOL — core cross-platform dependencies (web + LLM + productivity)
+# Used by: Dockerfile, .github/workflows/test.yml
+# macOS-only deps (MLX, pyobjc) live in requirements.txt so they don't
+# break Linux builds/CI.
+fastapi
+uvicorn[standard]
+python-multipart
+google-api-python-client
+google-auth
+google-auth-oauthlib
+google-auth-httplib2
+requests
+httpx
+PyJWT
+anthropic
+litellm
+python-dotenv
+pydantic
+pydantic-settings>=2.5.0
+firebase-admin
+beautifulsoup4
+tavily-python
+filelock
+sqlalchemy>=2.0.35
+aiosqlite>=0.20.0
+structlog>=24.4.0
+pluggy>=1.5.0
+websockets>=13.0
+pyzmq>=26.0.0
