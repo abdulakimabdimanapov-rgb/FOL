@@ -86,6 +86,7 @@ class FOL:
 
         # State
         self._conversation_history: list[dict[str, str]] = []
+        self._max_history: int = 100  # max turns kept in memory
         self._memories: list[dict[str, Any]] = []
         self._preferences: dict[str, Any] = {}
         self._knowledge: dict[str, Any] = {}
@@ -469,9 +470,21 @@ class FOL:
             self._record_turn(user_input, final)
             return final
 
-        # Generate response via LLM or fallback
+        # Generate response via LLM or fallback. Small local models default to
+        # generic offers of help ("How can I help you?") instead of answering;
+        # retry once with a direct-answer directive before the Personality Layer
+        # rebuilds the response as a last resort.
         response = await self._generate_response(user_input)
+        from modules.llm.personality import _is_generic_help_offer
+        if _is_generic_help_offer(response):
+            response = await self._generate_response(user_input, direct_answer=True)
         final = self._polish(user_input, response)
+        # Never repeat the previous answer verbatim (repeated-prompt guard): a
+        # stuttering model gets one more direct-answer attempt.
+        if self._conversation_history and final == self._conversation_history[-1]["assistant"]:
+            retry = await self._generate_response(user_input, direct_answer=True)
+            if retry and not _is_generic_help_offer(retry):
+                final = self._polish(user_input, retry)
 
         # Store conversation (the FINAL, polished text — what the user saw)
         self._record_turn(user_input, final)
@@ -502,6 +515,9 @@ class FOL:
         if response.startswith("__"):
             return
         self._conversation_history.append({"user": user_input, "assistant": response})
+        # Trim to max — prevent unbounded memory growth in long sessions.
+        if len(self._conversation_history) > self._max_history:
+            self._conversation_history = self._conversation_history[-self._max_history:]
         # Mirror into the core ContextManager so the follow-up machinery
         # (is_follow_up / get_current_topic / get_follow_up_context) sees the
         # same history as the live chat path.
@@ -852,6 +868,32 @@ class FOL:
         "терминал",
     )
 
+    # Dangerous shell patterns — blocked before execution (fail-closed).
+    # These are matched against the EXTRACTED command, not the full user input.
+    _DANGEROUS_CMD_PATTERNS: frozenset[str] = frozenset({
+        "rm -rf /", "rm -rf /*", "rm -fr /", "rm -fr /*",
+        "rm -r /", "rm -r /*",
+        ":(){ :|:& };:",  # fork bomb
+        "dd if=/dev/zero of=/dev/disk", "dd if=/dev/random of=/dev/disk",
+        "mkfs.",
+        "> /dev/sda",
+        "chmod -R 777 /", "chmod -R 777 /*",
+        "chown -R", "chown root",
+        "curl .*/|sh", "curl .*/|bash", "wget .*/|sh", "wget .*/|bash",
+        "curl .*/|sudo", "wget .*/|sudo",
+        "eval ",
+        "nc -l", "ncat -l",  # reverse shell listeners
+        "python -c 'import os'",
+        "python3 -c 'import os'",
+        "perl -e 'exec'",
+        "ruby -e 'exec'",
+        "shutdown", "reboot", "halt", "poweroff",
+        "launchctl remove",  # kill system services
+        "security delete-keychain",
+        "diskutil eraseDisk",
+        "defaults delete /",
+    })
+
     # Trailing filler that must never become part of the shell command.
     _SHELL_CMD_TAIL_NOISE = (
         " в терминале пожалуйста", " in the terminal please",
@@ -892,6 +934,22 @@ class FOL:
                 # (the dot is a real argument there, separated by a space).
                 cmd = re.sub(r"(?<=[a-zA-Zа-яА-ЯёЁ0-9)])[.!?…]+$", "", cmd).strip()
                 if not cmd:
+                    return None
+                # Security: block dangerous shell patterns (fail-closed).
+                # This is defense-in-depth — the ConfirmationGate (Level 5)
+                # catches most of these, but some pipe/eval patterns slip
+                # through when the command doesn't contain shell markers.
+                cmd_lower = cmd.lower()
+                for pattern in self._DANGEROUS_CMD_PATTERNS:
+                    if pattern in cmd_lower:
+                        logger.warning(
+                            "Blocked dangerous shell command: pattern=%r in cmd=%r",
+                            pattern, cmd,
+                        )
+                        return None
+                # Pipe to shell is always dangerous: "curl ... | sh"
+                if re.search(r"\|\s*(?:sh|bash|zsh|fish)\b", cmd_lower):
+                    logger.warning("Blocked pipe-to-shell command: %s", cmd)
                     return None
                 return cmd
         return None
@@ -3123,7 +3181,13 @@ Modes:
 
     # ─── Response Generation ─────────────────────────────────────────────
 
-    async def _generate_response(self, user_input: str) -> str:
+    async def _generate_response(self, user_input: str, *, direct_answer: bool = False) -> str:
+        """Generate a response via the LLM (with rule-based fallback).
+
+        ``direct_answer=True`` appends a hard instruction to the prompt: small
+        local models default to generic offers of help ("How can I help you?")
+        instead of answering — one retry with this nudge gets a real answer
+        without extra cost."""
         # Try LLM first
         if self._llm:
             try:
@@ -3154,7 +3218,15 @@ Modes:
                     except Exception as exc:
                         logger.debug("Brain context failed: %s", exc)
 
-                response = await self._llm.generate(user_input, context=full_context)
+                prompt = user_input
+                if direct_answer:
+                    prompt = (
+                        f"{user_input}\n\n"
+                        "Instruction: answer the question DIRECTLY and concisely. "
+                        "Do not greet, do not offer help, do not ask what the user needs. "
+                        "If you do not know the answer, say so and offer to search."
+                    )
+                response = await self._llm.generate(prompt, context=full_context)
                 if response and not response.startswith("[") and not response.startswith("All LLM"):
                     return response
             except Exception as exc:
