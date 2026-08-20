@@ -60,7 +60,7 @@ Thumbs.db
 *.err
 .gstack/
 
-# Swift build (FOL + SecondSelf)
+# Swift build (FOL)
 .build/
 .swiftpm/
 *.xcuserstate

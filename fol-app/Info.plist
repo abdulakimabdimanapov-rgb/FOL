@@ -1,0 +1,54 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <!-- Hide dock icon: this is a background utility app -->
+    <key>LSUIElement</key>
+    <true/>
+
+    <key>CFBundleName</key>
+    <string>FOL</string>
+
+    <key>CFBundleDisplayName</key>
+    <string>FOL</string>
+
+    <key>CFBundleIdentifier</key>
+    <string>com.secondself.app</string>
+
+    <key>CFBundleVersion</key>
+    <string>1.3.0</string>
+
+    <key>CFBundleShortVersionString</key>
+    <string>1.3.0</string>
+
+    <key>CFBundlePackageType</key>
+    <string>APPL</string>
+
+    <key>CFBundleExecutable</key>
+    <string>FOL</string>
+
+    <key>CFBundleIconFile</key>
+    <string>AppIcon</string>
+
+    <key>LSMinimumSystemVersion</key>
+    <string>14.0</string>
+
+    <key>NSHighResolutionCapable</key>
+    <true/>
+
+    <!-- Network access for SSE to orchestrator and VNC stream -->
+    <key>NSAppTransportSecurity</key>
+    <dict>
+        <key>NSAllowsLocalNetworking</key>
+        <true/>
+    </dict>
+
+    <!-- Accessibility description for global hotkey monitoring -->
+    <key>NSAppleEventsUsageDescription</key>
+    <string>FOL needs accessibility access to register global keyboard shortcuts.</string>
+
+    <!-- Microphone access for voice input (hold-to-talk STT) -->
+    <key>NSMicrophoneUsageDescription</key>
+    <string>FOL uses your microphone for voice input to chat with your Twin.</string>
+</dict>
+</plist>

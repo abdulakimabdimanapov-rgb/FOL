@@ -81,8 +81,8 @@ for port in 8420 8421 8000; do
     fi
 done
 
-# Kill any running FOL processes
-for proc in orchestrator agent-server "SecondSelf" "Second Self"; do
+# Kill any running FOL processes (new binary + legacy names)
+for proc in orchestrator agent-server "Contents/MacOS/FOL" "SecondSelf" "Second Self"; do
     PID=$(pgrep -f "$proc" 2>/dev/null || true)
     if [ -n "$PID" ]; then
         echo -e "  Killing $proc (PID $PID)..."
@@ -116,21 +116,14 @@ echo ""
 # ─── Step 3: Remove old installation ───
 echo -e "${YELLOW}[3/6]${NC} Removing old version..."
 
-# Remove from /Applications
-if [ -d "/Applications/Second Self.app" ]; then
-    echo -e "  Removing /Applications/Second Self.app..."
-    sudo rm -rf "/Applications/Second Self.app"
-    echo -e "  ${GREEN}✓${NC} Old app removed"
-else
-    echo -e "  ${GREEN}✓${NC} No old app found"
-fi
-
-# Remove /Applications/SecondSelf.app
-if [ -d "/Applications/SecondSelf.app" ]; then
-    echo -e "  Removing /Applications/SecondSelf.app..."
-    sudo rm -rf "/Applications/SecondSelf.app"
-    echo -e "  ${GREEN}✓${NC} Old app removed"
-fi
+# Remove from /Applications (current + legacy names)
+for OLD_APP in "/Applications/FOL.app" "/Applications/Second Self.app" "/Applications/SecondSelf.app"; do
+    if [ -d "$OLD_APP" ]; then
+        echo -e "  Removing $OLD_APP..."
+        sudo rm -rf "$OLD_APP"
+        echo -e "  ${GREEN}✓${NC} Old app removed"
+    fi
+done
 
 # Remove from /usr/local/share/second-self/ (keep .env for upgrade)
 if [ -d "/usr/local/share/second-self" ]; then
@@ -161,7 +154,7 @@ echo -e "${YELLOW}[4/6]${NC} Building v$VERSION..."
 bash "$REPO_DIR/build-pkg.sh"
 
 # Find the built .pkg
-PKG_FILE=$(ls -t "$REPO_DIR/build/Second-Self-"*.pkg 2>/dev/null | head -1)
+PKG_FILE=$(ls -t "$REPO_DIR/build/FOL-"*.pkg 2>/dev/null | head -1)
 if [ -z "$PKG_FILE" ]; then
     echo -e "${RED}  ❌ Build failed — no .pkg file found${NC}"
     exit 1
@@ -181,11 +174,11 @@ echo ""
 echo -e "${YELLOW}[6/6]${NC} Verifying installation..."
 
 # Check app exists
-if [ -d "/Applications/Second Self.app" ]; then
-    APP_SIZE=$(du -sh "/Applications/Second Self.app" | cut -f1)
-    echo -e "  ✅ App installed: /Applications/Second Self.app ($APP_SIZE)"
+if [ -d "/Applications/FOL.app" ]; then
+    APP_SIZE=$(du -sh "/Applications/FOL.app" | cut -f1)
+    echo -e "  ✅ App installed: /Applications/FOL.app ($APP_SIZE)"
 else
-    echo -e "  ⚠️  App not found at /Applications/Second Self.app"
+    echo -e "  ⚠️  App not found at /Applications/FOL.app"
 fi
 
 # Check shared files
@@ -202,11 +195,11 @@ echo -e "${CYAN}============================================${NC}"
 echo -e "${CYAN}  ✅ FOL v$VERSION installed!${NC}"
 echo -e "${CYAN}============================================${NC}"
 echo ""
-echo "  📍 App:     /Applications/Second Self.app"
+echo "  📍 App:     /Applications/FOL.app"
 echo "  📍 Backend: /usr/local/share/second-self/"
 echo ""
 echo "  🚀 To start:"
-echo "     open /Applications/Second\\ Self.app"
+echo "     open /Applications/FOL.app"
 echo ""
 echo "  Or run servers manually:"
 echo "     python3 orchestrator/server.py     # :8420"
@@ -225,7 +218,7 @@ else
 fi
 if [ "$LAUNCH_NOW" = "y" ] || [ "$LAUNCH_NOW" = "Y" ]; then
     echo "Launching..."
-    open "/Applications/Second Self.app"
+    open "/Applications/FOL.app"
     echo -e "${GREEN}✅ FOL launched!${NC}"
 fi
 

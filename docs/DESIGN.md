@@ -27,7 +27,7 @@ PRIMARY SESSION                         AGENT SESSION
 ─────────────────                       ─────────────────────
 
 ┌──────────────────────────────┐
-│  SecondSelf.app (SwiftUI)    │
+│  FOL.app (SwiftUI)            │
 │                              │
 │  ┌────────────────────────┐  │
 │  │ NotchOverlay (NSPanel)  │  │
@@ -86,7 +86,7 @@ PRIMARY SESSION                         AGENT SESSION
 
 ## Key Components
 
-### SecondSelf.app (SwiftUI, macOS)
+### FOL.app (SwiftUI, macOS)
 
 The notch-resident UI. No dock icon (LSUIElement). Built with Swift Package Manager.
 
@@ -187,9 +187,9 @@ data: {}
 
 ```
 second-self/
-├── SecondSelf/                    # SwiftUI macOS app
+├── fol-app/                      # SwiftUI macOS app
 │   ├── Package.swift
-│   ├── SecondSelfApp.swift        # Entry point, subprocess launcher
+│   ├── FOLApp.swift               # Entry point, subprocess launcher
 │   ├── NotchOverlayController.swift
 │   ├── Views/
 │   │   ├── ChatView.swift
@@ -242,7 +242,7 @@ bash start-agent-server.sh
 
 Terminal 2 — build and run the app (auto-starts orchestrator):
 ```bash
-cd SecondSelf && swift build && swift run
+cd fol-app && swift build && swift run
 ```
 
 ### Prerequisites

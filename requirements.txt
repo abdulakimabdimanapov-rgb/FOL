@@ -10,8 +10,9 @@ httpx
 hypothesis>=6.0.0
 
 # FOL — macOS-only / heavy extras (merged)
+# mlx / mlx-whisper stay for LOCAL SPEECH-TO-TEXT only. mlx-lm (local LLM
+# inference) is REMOVED by policy — FOL does not run local LLMs.
 mlx>=0.19.0
-mlx-lm>=0.19.0
 mlx-whisper>=0.4.0
 chromadb>=0.5.5
 pyobjc>=10.3.0

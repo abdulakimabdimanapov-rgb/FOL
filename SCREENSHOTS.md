@@ -1,27 +1,26 @@
 # FOL — Screenshot Plan (Stardance)
 
 Six screenshots needed. All must capture **real working states** — do not
-compose or fake them. Prereq: Ollama running (`ollama serve`, model
-`llama3.2:3b` pulled) so the demo works without paid credits.
+compose or fake them. Prereq: an API key for an LLM provider (OpenRouter /
+OpenAI / Anthropic) in `.env` — FOL uses cloud-only brains (no local LLMs).
 
 ## Setup for every shot
 
 ```bash
 cd ~/Desktop/Fol
 ./run_all.sh            # starts orchestrator :8420, agent :8421, fol :8754
-ollama serve            # if not already running (local LLM, no credits needed)
 ```
 
 ## 1. FOL Notch UI
 
-- Launch: `cd SecondSelf && swift run` (or `open "build/Second Self.app"`)
+- Launch: `cd fol-app && swift run` (or `open "build/FOL.app"`)
 - Capture the Notch panel with the chat input visible.
 - **Tool:** macOS `Cmd+Shift+4` region capture → `screenshots/01-notch-ui.png`
 
 ## 2. FOL main interaction
 
 - Type in the notch (or `curl`): `What is the current time?`
-- Wait for the streamed answer (via Ollama — no credits required).
+- Wait for the streamed answer (streamed from the API provider).
 - Capture the response bubble.
 - **Tool:** region capture → `screenshots/02-interaction.png`
 

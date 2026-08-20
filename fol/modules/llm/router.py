@@ -64,6 +64,13 @@ _DEFAULT_MODEL = "claude-sonnet-4-20250514"
 # substring rules (e.g. ``openrouter/anthropic/…`` is OpenRouter, not Anthropic).
 _LOCAL_PREFIXES = ("ollama/", "local/", "vllm/", "lm-studio")
 
+# POLICY: FOL does NOT use local LLMs (Ollama / MLX inference / local model
+# files). Local models are skipped in every model chain unless this flag is
+# explicitly set — FOL's hardware stays cool, reasoning goes through
+# Freebuff / API providers only.
+def _local_llms_enabled() -> bool:
+    return os.environ.get("FOL_ENABLE_LOCAL_LLM", "").strip().lower() in ("1", "true", "yes")
+
 # When a model emits a tool call as plain JSON text, we hold the text back
 # from the token stream until we know what it is. Beyond this size we give up
 # holding and treat it as prose (a normal answer that merely starts with '{').
@@ -71,7 +78,11 @@ _MAX_TEXT_TOOL_CALL_HOLD = 1024
 
 
 def is_local_model(model: str) -> bool:
-    """True when the model is served locally (Ollama, vLLM, LM Studio, MLX)."""
+    """True when the model is served locally (Ollama, vLLM, LM Studio, MLX).
+
+    Local LLMs are removed from FOL's runtime by policy; this predicate is
+    kept for classification (logging, tests) and for the chain gate.
+    """
     m = model.lower().strip()
     if m.startswith(_LOCAL_PREFIXES):
         return True
@@ -203,6 +214,32 @@ def _read_timeout() -> float | None:
         return None
 
 
+# OpenRouter key rotation — shared with analyze/_llm.py
+_openrouter_key_index: int = 0
+_openrouter_rotation_reset: float = 0
+
+
+def _get_openrouter_key() -> str:
+    """Return the current OpenRouter API key with rotation support."""
+    global _openrouter_key_index, _openrouter_rotation_reset
+    import time as _time
+    now = _time.time()
+    if _openrouter_key_index > 0 and now > _openrouter_rotation_reset:
+        _openrouter_key_index = 0
+    if _openrouter_key_index == 0:
+        return os.environ.get("OPENROUTER_API_KEY", "") or ""
+    return os.environ.get("OPENROUTER_API_KEY_2", "") or os.environ.get("OPENROUTER_API_KEY", "") or ""
+
+
+def rotate_in_openrouter_key() -> None:
+    """Switch to the next OpenRouter API key (called on rate limit)."""
+    global _openrouter_key_index, _openrouter_rotation_reset
+    import time as _time
+    if os.environ.get("OPENROUTER_API_KEY_2", "") and _openrouter_key_index == 0:
+        _openrouter_key_index = 1
+        _openrouter_rotation_reset = _time.time() + 300
+
+
 def api_key_for_model(model: str) -> str | None:
     """Return the API key (or ``"local"``) for a model name, or ``None``.
 
@@ -212,21 +249,24 @@ def api_key_for_model(model: str) -> str | None:
     model_lower = model.lower()
 
     if model_lower.startswith("openrouter/"):
-        return os.environ.get("OPENROUTER_API_KEY")
+        return _get_openrouter_key()
     if any(model_lower.startswith(p) for p in _LOCAL_PREFIXES):
         return "local"
     if model_lower.startswith("gemini/"):
         return os.environ.get("GEMINI_API_KEY")
     if model_lower.startswith("claude") or "anthropic" in model_lower:
         return os.environ.get("ANTHROPIC_API_KEY")
+    # Groq (check BEFORE OpenAI — groq/openai/gpt-oss-* must resolve to Groq)
+    if model_lower.startswith("groq/") or ("groq" in model_lower and "/openai" not in model_lower):
+        return os.environ.get("GROQ_API_KEY")
     if any(model_lower.startswith(p) for p in ("gpt", "o1", "o3")) or "openai" in model_lower:
         return os.environ.get("OPENAI_API_KEY")
     if "together" in model_lower:
         return os.environ.get("TOGETHER_API_KEY")
     if "deepseek" in model_lower:
         return os.environ.get("DEEPSEEK_API_KEY")
-    if "groq" in model_lower:
-        return os.environ.get("GROQ_API_KEY")
+    if model_lower.startswith("xai/") or "grok" in model_lower:
+        return os.environ.get("XAI_API_KEY")
     return os.environ.get("ANTHROPIC_API_KEY")
 
 
@@ -237,7 +277,11 @@ def build_model_chain(
     key_resolver=None,
 ) -> list[str]:
     """Build the ordered model chain: primary + fallbacks, skipping models
-    whose provider has no API key (local models always pass)."""
+    whose provider has no API key.
+
+    POLICY: local models (``ollama/``, MLX, vLLM, LM Studio) are skipped
+    unless ``FOL_ENABLE_LOCAL_LLM=1`` — FOL does not run local LLMs.
+    """
     if key_resolver is None:
         key_resolver = api_key_for_model  # resolved at call time (patchable)
     config = _read_config()
@@ -248,6 +292,12 @@ def build_model_chain(
     chain: list[str] = []
     for model in [primary] + fallback_list:
         if model in chain:
+            continue
+        if is_local_model(model) and not _local_llms_enabled():
+            logger.warning(
+                "Skipping local model %s: local LLMs are disabled (FOL_ENABLE_LOCAL_LLM=1 to enable)",
+                model,
+            )
             continue
         if key_resolver(model) is None:
             logger.warning("Skipping model %s: no API key configured for its provider", model)

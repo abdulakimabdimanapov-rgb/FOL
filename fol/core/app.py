@@ -40,6 +40,7 @@ from modules.llm.personality import (
     polish_response,
 )
 from modules.tools.system.universal_executor import UniversalExecutor
+from modules.brain.startup import BrainStartupManager
 
 logger = logging.getLogger(__name__)
 
@@ -72,6 +73,11 @@ class FOL:
         self._llm = None
         self._tools = None
         self._tts_output = None
+
+        # Brain startup and health management
+        self._brain_manager: Any = None
+        self._brain_interface: Any = None
+        self._brain_status: dict[str, Any] = {"state": "unknown"}
 
         # JARVIS capabilities
         self._voice: Any = None
@@ -301,6 +307,31 @@ class FOL:
         self._gate = ConfirmationGate(self._tools)
         self.orchestrator.register_module("gate", self._gate)
 
+        # Initialize Brain Backend (Freebuff with auto-start and health checks)
+        try:
+            def _brain_status_callback(status: dict[str, Any]) -> None:
+                """Callback when brain status changes."""
+                self._brain_status = status
+                logger.info("Brain status changed: %s", status)
+                # Emit event for UI/Dynamic Island updates
+                self.event_bus.emit(EventType.BRAIN_STATUS_CHANGED, source="app", payload=status)
+
+            self._brain_manager = BrainStartupManager(
+                primary_brain="freebuff",
+                fallback_brains=["current"],
+                auto_start=getattr(settings, "brain_auto_start", True),
+                status_callback=_brain_status_callback,
+            )
+            
+            # Initialize brain backends (start Freebuff if available)
+            self._brain_interface = await self._brain_manager.initialize()
+            logger.info("Brain backend initialized: %s", self._brain_interface.name)
+            self.orchestrator.register_module("brain", self._brain_interface)
+        except Exception as exc:
+            logger.error("Failed to initialize Brain backend: %s", exc)
+            self._brain_manager = None
+            self._brain_interface = None
+
         # Initialize Universal Executor
         self._universal_executor = UniversalExecutor(llm_engine=self._llm, tool_registry=self._tools)
 
@@ -398,6 +429,14 @@ class FOL:
     async def _on_shutdown(self) -> None:
         """Shutdown hook."""
         logger.info("FOL shutting down")
+        
+        # Shutdown Brain startup manager (gracefully stop Freebuff if owned)
+        if self._brain_manager:
+            try:
+                await self._brain_manager.shutdown()
+            except Exception as exc:
+                logger.error("Error shutting down brain manager: %s", exc)
+        
         if self._llm:
             await self._llm.shutdown()
         if self._tts_output:

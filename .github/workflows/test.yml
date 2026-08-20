@@ -87,6 +87,6 @@ jobs:
       - uses: actions/checkout@v4
       - name: Build SwiftUI app
         run: |
-          cd SecondSelf
+          cd fol-app
           swift build
         timeout-minutes: 20

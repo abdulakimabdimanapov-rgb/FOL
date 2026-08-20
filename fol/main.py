@@ -1,7 +1,7 @@
 """FOL entry point.
 
 Usage:
-    # From SecondSelf/ directory:
+    # From fol-app/ directory:
     python fol/main.py
 """
 import sys

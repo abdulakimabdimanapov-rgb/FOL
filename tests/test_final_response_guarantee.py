@@ -186,6 +186,48 @@ class TestErrorsHumanized:
         assert "print(1)" in out
 
 
+class TestGenericHelpOfferNeverFinal:
+    """A concrete question must never be answered with "How can I help you?"."""
+
+    def test_offer_replaced_en(self):
+        out = format_final_response("How can I help you?", [], "en",
+                                    user_input="What is the capital of France?")
+        assert out and out.strip()
+        assert "How can I help you?" not in out
+        assert "What can I help you with?" not in out
+        assert "I'm here to help" not in out
+
+    def test_offer_replaced_ru(self):
+        out = format_final_response("Чем могу помочь?", [], "ru",
+                                    user_input="Что такое энтропия?")
+        assert out and out.strip()
+        assert "Чем могу помочь" not in out
+        assert any(ord(c) > 0x0400 for c in out), "RU question must get a RU answer"
+
+    def test_offer_without_user_input_still_replaced(self):
+        # Even when the orchestrator didn't forward the task, a pure offer of
+        # help is never a usable final answer.
+        out = format_final_response("How can I help you?", [], "en")
+        assert out and out.strip()
+        assert "How can I help you?" not in out
+
+    def test_greeting_user_may_get_offer(self):
+        out = format_final_response("Hi! How can I help you?", [], "en",
+                                    user_input="hello")
+        assert out and out.strip()
+
+    def test_real_answer_with_help_phrase_passes(self):
+        out = format_final_response(
+            "I can help you set up the printer. Open System Settings first.",
+            [], "en", user_input="How do I set up a printer?")
+        assert "printer" in out
+
+    def test_stutter_deduped(self):
+        out = format_final_response("Open the README. Open the README.", [], "en",
+                                    user_input="Which file should I edit?")
+        assert out.count("Open the README") == 1
+
+
 class TestSanitizeStream:
     @pytest.mark.asyncio
     async def test_tool_events_dropped(self):

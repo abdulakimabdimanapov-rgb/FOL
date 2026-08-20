@@ -34,7 +34,7 @@ AI-ассистент уровня JARVIS, цифровой двойник по�
 | **Интерфейсы** | Notch UI (SwiftUI), Web (Next.js), Mobile PWA (bridge), CLI, голос |
 | **Ядро** | Python 3.9+ (реком. 3.11), FastAPI, LiteLLM, SwiftUI |
 | **Главные сервисы** | Orchestrator (:8420), Agent Server (:8421), Bridge (:8422), Dashboard (:8423), FOL API (:8754) |
-| **LLM** | OpenRouter / Ollama / OpenAI / Anthropic / Gemini / MLX (локально) с автопереключением |
+| **LLM** | OpenRouter / OpenAI / Anthropic / Gemini (только API, без локальных моделей) с автопереключением |
 | **Память** | 6 слоёв: identity → preferences → relationships → context → episodic → Obsidian vault |
 | **Особенности** | Билингвальный роутер (RU+EN), двухэтапный выбор инструментов, loop guard, живая память Obsidian, голос, зрение, агентный цикл |
 
@@ -49,7 +49,7 @@ Orchestrator (FastAPI, :8420)
       │  двухэтапный выбор инструментов (категория → 5–12)
       │  loop guard (защита от зацикливания)
       ▼
-LLM (LiteLLM: OpenRouter / Ollama / OpenAI / Anthropic / Gemini)
+LLM (LiteLLM: OpenRouter / OpenAI / Anthropic / Gemini — cloud-only)
       │  tool calls
       ▼
 Исполнение: Agent Server (:8421) · Productivity (Gmail/Calendar) · Obsidian · FOL (:8754)
@@ -89,9 +89,9 @@ LLM (LiteLLM: OpenRouter / Ollama / OpenAI / Anthropic / Gemini)
 - **SSE-событие:** `component`
 
 ### Audio — Звук и голос (JARVIS)
-- **Swift:** `SecondSelf/Utilities/AudioManager.swift`, `SoundSynthesizer.swift` — JARVIS-звуки синтезируются в памяти (активация, подтверждение, HUD-клики)
+- **Swift:** `fol-app/Utilities/AudioManager.swift`, `SoundSynthesizer.swift` — JARVIS-звуки синтезируются в памяти (активация, подтверждение, HUD-клики)
 - **Файлы .wav:** `jarvis_activation.wav`, `jarvis_boot_chime.wav`, `jarvis_confirmation.wav`, `jarvis_hud_click.wav`
-- **Запись голоса:** `SecondSelf/Services/AudioRecorder.swift`, `SpeechService.swift`, `ElevenLabsService.swift` (STT)
+- **Запись голоса:** `fol-app/Services/AudioRecorder.swift`, `SpeechService.swift`, `ElevenLabsService.swift` (STT)
 
 ## B
 
@@ -155,7 +155,7 @@ LLM (LiteLLM: OpenRouter / Ollama / OpenAI / Anthropic / Gemini)
 ## E
 
 ### ElevenLabs — STT (голос → текст)
-- **Путь:** `SecondSelf/Services/ElevenLabsService.swift`
+- **Путь:** `fol-app/Services/ElevenLabsService.swift`
 - **Роль:** распознавание речи при удержании кнопки (hold-to-talk STT)
 
 ### episodic — Эпизодическая память
@@ -163,7 +163,7 @@ LLM (LiteLLM: OpenRouter / Ollama / OpenAI / Anthropic / Gemini)
 - **Роль:** слой 4 — жизненные события; дублируется в Obsidian `Episodic/events.md` (debounce 30s)
 
 ### .env — Конфигурация
-- **Файлы:** `.env` (не в Git), `.env.example`, `.env.template`, `SecondSelf/.env.template`
+- **Файлы:** `.env` (не в Git), `.env.example`, `.env.template`, `fol-app/.env.template`
 - **Роль:** все ключи и настройки (см. [Переменные окружения](#переменные-окружения-env))
 
 ## F
@@ -208,7 +208,7 @@ LLM (LiteLLM: OpenRouter / Ollama / OpenAI / Anthropic / Gemini)
 - **Слои 1–4:** identity.md (кто ты), preferences.md (как работаешь), relationships (кого знаешь), episodic.md (что произошло)
 
 ### Info.plist — Конфигурация приложения
-- **Пути:** `SecondSelf/Info.plist`, `fol/ui/macos/Resources/Info.plist`
+- **Пути:** `fol-app/Info.plist`, `fol/ui/macos/Resources/Info.plist`
 - **Роль:** CFBundleName = FOL, разрешения (микрофон, accessibility, AppleEvents)
 
 ## J
@@ -220,7 +220,7 @@ LLM (LiteLLM: OpenRouter / Ollama / OpenAI / Anthropic / Gemini)
 
 ### LLM — Языковые модели
 - **Путь:** `analyze/_llm.py`, `analyze/_llm_async.py`, `orchestrator/llm_bridge.py`, `fol/modules/llm/` (router.py, engine.py, backends/, personality.py)
-- **Провайдеры:** OpenRouter (по умолчанию), Ollama (локально), OpenAI, Anthropic, Gemini, MLX (Apple Silicon)
+- **Провайдеры:** OpenRouter (по умолчанию), OpenAI, Anthropic, Gemini — только API-провайдеры; локальные LLM (Ollama/MLX) исключены политикой
 - **Фолбэк:** `LLM_FALLBACK_MODELS` — цепочка моделей, пустой ответ = сбой → следующая модель; модели без ключа пропускаются
 - **См.** [LLM-модели](#llm-модели)
 
@@ -259,7 +259,7 @@ LLM (LiteLLM: OpenRouter / Ollama / OpenAI / Anthropic / Gemini)
 - **Роль:** очистка whitespace, каппинг повторов, 22 русские аббревиатуры (спс→спасибо…), фонетические подстановки (`_RU_TYPO_MAP`)
 
 ### Notch UI — Панель в вырезе MacBook
-- **Путь:** `SecondSelf/` (NotchPanel.swift, NotchOverlayController.swift, NotchViews.swift, ChatView.swift…), `fol/ui/macos/Sources/SecondSelf/`
+- **Путь:** `fol-app/` (NotchPanel.swift, NotchOverlayController.swift, NotchViews.swift, ChatView.swift…), `fol/ui/macos/Sources/SecondSelf/`
 - **Роль:** NSPanel с 4 состояниями (idle → peek → expanded → fullChat), A2UI-карточки, VNC PiP, голосовая кнопка
 
 ## O
@@ -324,8 +324,8 @@ LLM (LiteLLM: OpenRouter / Ollama / OpenAI / Anthropic / Gemini)
 - **Путь:** `scripts/`
 - **Ключевые:** `demo.sh` (видео-демо), `verify_scenarios.sh` (5 сценариев), `e2e_check.py`, `e2e_final_response.py`, `run_benchmarks.sh`, `compare_benchmarks.py`, `stress_test_nemotron.py`, `verify_nemotron.py`, `sign-and-notarize.sh`, `vendor-deps.sh`, `fetch-python.sh`, `make_readme_pdf.py`, `start_services.py`
 
-### SecondSelf — SwiftUI macOS приложение
-- **Путь:** `SecondSelf/`
+### FOL — SwiftUI macOS приложение
+- **Путь:** `fol-app/`
 - **Структура:** ViewModels/ (ChatViewModel), Views/ (ChatView, ChatInputBar, VoiceInputButton, A2UIRenderer, VNCPipView, SetupWizardView…), Models/ (ChatMessage, A2UIModels, TwinState…), Services/ (Audio, Speech, ElevenLabs, MultipartFormData), Utilities/ (DesignTokens, AudioManager, SoundSynthesizer)
 - **Роль:** Notch UI, SSE-чат, голос, A2UI-карточки, VNC PiP, меню-бар (status item), проверка/запуск сервисов (не убивает живые)
 
@@ -382,7 +382,7 @@ LLM (LiteLLM: OpenRouter / Ollama / OpenAI / Anthropic / Gemini)
 - **Роль:** PiP-просмотр экрана агент-сессии (`VNCPipView.swift`)
 
 ### Voice — Голосовой ввод
-- **Путь:** `SecondSelf/Views/VoiceInputButton.swift` (анимация пульсации, pulse rings, glow), `SecondSelf/Views/ChatInputBar.swift` (AudioWaveformView — физическая симуляция волн: масса-пружина-демпфер)
+- **Путь:** `fol-app/Views/VoiceInputButton.swift` (анимация пульсации, pulse rings, glow), `fol-app/Views/ChatInputBar.swift` (AudioWaveformView — физическая симуляция волн: масса-пружина-демпфер)
 - **Роль:** hold-to-talk запись, состояния idle/recording/transcribing/error
 
 ## W
@@ -410,7 +410,7 @@ LLM (LiteLLM: OpenRouter / Ollama / OpenAI / Anthropic / Gemini)
 | **3000** | Next.js | Web-интерфейс (dev) |
 | **9222** | Chrome DevTools | Агент-браузер (CDP) |
 | **5901** | Vine VNC (резерв) | Виртуальный дисплей secondself |
-| **11434** | Ollama | Локальный LLM (опционально) |
+| ~~11434~~ | ~~Ollama~~ | Удалён политикой «без локальных LLM» |
 
 ### Агенты роутера
 
@@ -428,10 +428,10 @@ LLM (LiteLLM: OpenRouter / Ollama / OpenAI / Anthropic / Gemini)
 | Модель | Провайдер | Использование |
 |--------|-----------|---------------|
 | `openrouter/nvidia/nemotron-3-super-120b-a12b:free` | OpenRouter | **По умолчанию** (бесплатно, отличный tool calling) |
-| `ollama/llama3.2:3b` | Ollama (локально) | Фолбэк / офлайн-режим |
 | `openai/gpt-4o-mini` | OpenAI | Платный вариант |
 | Claude Sonnet 4 | Anthropic | Премиум-вариант |
-| MLX (Qwen2.5-0.5B-4bit и др.) | Локально (Apple Silicon) | Ядро FOL (fol) |
+| ~~`ollama/llama3.2:3b`~~ | ~~Ollama~~ | ~~Удалён политикой~~ — локальные модели не используются |
+| ~~MLX (Qwen2.5-0.5B-4bit)~~ | ~~Локально~~ | ~~Удалён политикой~~ — ядро FOL работает через API |
 
 ### Память (6 слоёв)
 
@@ -462,7 +462,7 @@ python3 -m pytest tests/test_router.py -v    # роутер
 python3 -m pytest tests/test_normalize.py -v # нормализация
 
 # === Сборка ===
-cd SecondSelf && swift build                 # SwiftUI
+cd fol-app && swift build                 # SwiftUI
 ./build-app.sh                               # .app
 ./build-pkg.sh                               # .pkg
 

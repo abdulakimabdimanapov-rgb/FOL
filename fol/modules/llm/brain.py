@@ -23,11 +23,11 @@ Backends
   existing canonical ``LLMRouter`` (LiteLLM: OpenRouter/Ollama/MLX/…). It
   duplicates NO LLM logic — routing, fallback chains and backends stay exactly
   where they are today.
-- ``freebuff`` — NOT selectable yet. :class:`FreebuffBrainAdapter` exists but
-  honestly reports that Freebuff has no supported programmatic interface
-  (audited: CLI is interactive-TUI only; no SDK, no server, no public API).
-  Selecting ``FOL_BRAIN=freebuff`` raises :class:`BrainConfigurationError`
-  instead of silently falling back to another brain.
+- ``freebuff_tmux`` — :class:`FreebuffTmuxBridge`, Freebuff CLI running inside
+  a persistent tmux session. Uses ``tmux capture-pane`` for reliable TUI output
+  parsing. Fallback to ``current`` on failure.
+- ``freebuff`` — Freebuff models accessed via OpenRouter.
+- ``freebuff_cli`` — DEPRECATED: PTY-based, fundamentally broken for React TUIs.
 
 Memory is deliberately OUT of this interface: the brain reasons, the
 ``MemoryService`` (Obsidian) stores. Secret scrubbing in memory is preserved
@@ -518,8 +518,61 @@ def get_brain(name: str | None = None, *, router: LLMRouter | None = None) -> Br
         return CurrentLLMAdapter(router=router)
 
     if cfg in ("freebuff", "freebuff_adapter", "freebuffbrain"):
-        # Freebuff (free service) — still no public API. Fail clearly.
-        raise BrainConfigurationError(FREEBUFF_REQUIREMENTS)
+        # Freebuff (free service) — uses OpenRouter as the legitimate interface.
+        # Freebuff has no public HTTP API; its models are accessed via OpenRouter.
+        from modules.brain.freebuff_adapter import FreebuffBrainAdapter
+
+        adapter = FreebuffBrainAdapter()
+        if not adapter.available:
+            raise BrainConfigurationError(
+                "Freebuff brain unavailable. "
+                "Configure OPENROUTER_API_KEY in your .env file. "
+                "Freebuff models are accessed through OpenRouter."
+            )
+        # Freebuff primary, LiteLLM fallback
+        from modules.llm.brain_router import BrainRouter
+        return BrainRouter([adapter, CurrentLLMAdapter(router=router)])
+
+    if cfg in ("freebuff_cli", "freebuff-pty", "freebuffpty"):
+        # Freebuff CLI via PTY — DEPRECATED: TUI parsing is fundamentally
+        # broken for React-based TUIs. Use freebuff_tmux instead.
+        import warnings
+        warnings.warn(
+            "FOL_BRAIN=freebuff_cli is deprecated and unreliable. "
+            "Use FOL_BRAIN=freebuff_tmux instead.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+        from modules.llm.brain_router import BrainRouter
+        from modules.brain.freebuff_bridge import FreebuffBridgeCLI
+
+        bridge = FreebuffBridgeCLI()
+        if not bridge.available:
+            raise BrainConfigurationError(
+                "Freebuff CLI unavailable. "
+                "Install: npm install -g freebuff\n"
+                "Or set FREEBUFF_BINARY to the correct path."
+            )
+        return BrainRouter([bridge, CurrentLLMAdapter(router=router)])
+
+    if cfg in ("freebuff_tmux", "freebuff-tmux", "freebufftmux"):
+        # Freebuff CLI via tmux — the PRIMARY brain backed by Freebuff
+        # running inside a persistent tmux session. Uses tmux capture-pane
+        # for reliable TUI output parsing.
+        from modules.llm.brain_router import BrainRouter
+        from modules.brain.freebuff_tmux_bridge import FreebuffTmuxBridge
+
+        bridge = FreebuffTmuxBridge()
+        if not bridge.available:
+            raise BrainConfigurationError(
+                "Freebuff tmux bridge unavailable. "
+                "Requirements:\n"
+                "  1. tmux installed (brew install tmux)\n"
+                "  2. freebuff binary on PATH\n"
+                "Or set FREEBUFF_BINARY to the correct path."
+            )
+        # Freebuff tmux primary, LiteLLM fallback
+        return BrainRouter([bridge, CurrentLLMAdapter(router=router)])
 
     if cfg in ("codebuff", "codebuff_sdk"):
         # Codebuff SDK (paid — requires CODEBUFF_API_KEY)
@@ -546,7 +599,8 @@ def get_brain(name: str | None = None, *, router: LLMRouter | None = None) -> Br
 
     raise BrainConfigurationError(
         f"Unknown FOL_BRAIN={cfg!r}. Valid values: 'current' (default), "
-        f"'codebuff' (Codebuff SDK, paid), 'freebuff' (unavailable)."
+        f"'freebuff' (Freebuff via OpenRouter), 'freebuff_tmux' (Freebuff CLI via tmux), "
+        f"'freebuff_cli' (deprecated PTY), 'codebuff' (Codebuff SDK, paid)."
     )
 
 

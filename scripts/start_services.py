@@ -18,7 +18,7 @@ import subprocess
 import sys
 from typing import Optional
 
-ROOT = "/Users/abulakimabdimanapov/Desktop/SecondSelf"
+ROOT = "/Users/abulakimabdimanapov/Desktop/Fol"
 
 SERVICES = [
     ("orchestrator", 8420, ["python3", "orchestrator/server.py"], "orchestrator.log"),
@@ -130,7 +130,7 @@ def main():
 
     if want_swift:
         pid = daemonize(["swift", "run"], "/tmp/secondself_swift.log",
-                        cwd=os.path.join(ROOT, "SecondSelf"))
+                        cwd=os.path.join(ROOT, "fol-app"))
         print(f"  [START] SwiftUI app (forked pid {pid}, log /tmp/secondself_swift.log)")
 
     print("\nDone. Check with: python3 scripts/start_services.py --status")

@@ -47,6 +47,11 @@ For simple actions, keep responses concise. For conversations, behave naturally 
 Use light humor when appropriate. Do not overuse JARVIS phrases or honorifics.
 Always prioritize usefulness and context.
 Never answer with a bare "Done.", "Готово.", "OK.", "Выполнено." or "Task completed." — describe the outcome instead.
+Never respond with a generic offer of help ("How can I help you?", "Чем могу помочь?", "I'm here to help.") unless the user just greeted you.
+When the user asks a concrete question, answer it DIRECTLY with a concrete, useful answer in the user's language.
+Do not greet, do not ask what the user needs, and do not offer help before answering.
+If you genuinely cannot answer, say so honestly and offer to search the web or check memory — never deflect with a generic greeting.
+Keep answers concise: 2-4 sentences for simple questions, never repeat the same sentence twice.
 """
 
 # ---------------------------------------------------------------------------
@@ -183,6 +188,152 @@ def _is_robotic_confirmation(text: str) -> bool:
     if not t:
         return False
     return any(p.match(t) for p in _ROBOTIC_PATTERNS)
+
+
+# ---------------------------------------------------------------------------
+# Generic offer-of-help detection — small local models default to
+# "How can I help you?" / "Чем могу помочь?" instead of answering a concrete
+# question. That is a greeting-like non-answer and must never be the final
+# response to a real question.
+# ---------------------------------------------------------------------------
+
+_GREETING_WORDS_RE = re.compile(
+    r"\b(hi|hello|hey|yo|howdy|good (?:morning|afternoon|evening)|good night|"
+    r"привет|здравствуй|здравствуйте|добрый (?:день|вечер|утро)|доброе утро|доброй ночи)\b",
+    re.IGNORECASE,
+)
+
+# A response that is (optional greeting +) essentially ONLY a generic offer
+# of help. The offer phrase must dominate: anything substantive around it
+# makes the response a real answer and it passes through untouched.
+_GENERIC_HELP_OFFER_RE = re.compile(
+    r"^\s*"
+    r"(?:"
+    r"(?:hi|hello|hey|yo|howdy|good (?:morning|afternoon|evening)|good night|"
+    r"привет|здравствуй(?:те)?|добрый (?:день|вечер|утро)|доброе утро|доброй ночи)"
+    r"[,.!\s]+"
+    r")?"
+    r"(?:"
+    r"how (?:can|may) i (?:help|assist) you"
+    r"|how can i be of assistance"
+    r"|what can i (?:help you with|do for you|do to help)"
+    r"|what do you (?:need|want) (?:help with|me to do)"
+    r"|what would you like (?:me to do|to do)"
+    r"|is there anything (?:else )?i can (?:help you with|do for you)"
+    r"|let me know (?:how i can help|what you need|if you need anything)"
+    r"|i'?m here to help"
+    r"|i am here to help"
+    r"|how may i (?:help|assist) you today"
+    r"|чем (?:я )?могу (?:помочь|быть полезен|быть полезна|быть полезным)"
+    r"|чем (?:вам|тебе) помочь"
+    r"|чем помочь"
+    r"|как (?:я )?могу помочь"
+    r"|что (?:я )?могу (?:сделать для вас|сделать для тебя|для вас сделать)"
+    r"|скажите?,? чем помочь"
+    r"|я здесь,? чтобы помочь"
+    r")"
+    r"(?:\s*(?:today|now|please|сегодня|сейчас|пожалуйста))?"
+    r"[\s.,!?;:)…-]*$",
+    re.IGNORECASE,
+)
+
+
+def _is_generic_help_offer(text: str) -> bool:
+    """True when ``text`` is essentially only a generic offer of help
+    ("How can I help you?" / "Чем могу помочь?", optionally wrapped in a
+    greeting). Small local models produce these instead of answering.
+    """
+    t = (text or "").strip()
+    if not t or len(t) > 220:
+        # Long responses that merely mention help are real answers.
+        return False
+    # Models sometimes stutter the same offer twice — treat as one offer.
+    t = dedupe_repeated_sentences(t)
+    # Trailing emoji ("...today? 😊") must not break the anchor.
+    t = re.sub(r"[\W_]+$", "", t)
+    return _GENERIC_HELP_OFFER_RE.match(t) is not None
+
+
+_COMMAND_VERBS = frozenset({
+    "открой", "откройте", "запусти", "запустите", "сделай", "сделайте",
+    "найди", "найти", "поищи", "напиши", "написать", "создай", "покажи",
+    "включи", "выключи", "скажи", "расскажи", "запомни", "сохрани",
+    "open", "launch", "start", "run", "find", "search", "write", "create",
+    "show", "play", "tell", "remember", "save", "screenshot", "open",
+})
+
+
+def _is_pure_greeting(user_input: str) -> bool:
+    """True when the user's message is just a greeting / small talk (no real
+    question or command), so a greeting-like response is acceptable."""
+    t = (user_input or "").strip().strip(".,!?")
+    if not _GREETING_WORDS_RE.search(t.lower()):
+        return False
+    words = [w for w in re.findall(r"[a-zа-яё]{2,}", t.lower())
+             if w not in ("пожалуйста", "please", "there", "fol", "сэр", "sir")]
+    # A greeting + a command is a real request ("Привет, открой Safari").
+    if any(w in t.lower() for w in _COMMAND_VERBS):
+        return False
+    # A greeting + a question word / question mark is a real request.
+    if "?" in t or any(w in t.lower() for w in ("что", "как", "какой", "какая", "which",
+                                                "what", "how", "when", "where", "why", "who")):
+        return len(words) <= 2
+    return len(words) <= 3
+
+
+_CAPABILITY_QUESTIONS_RE = re.compile(
+    r"\b(?:what can you do|what do you do|what are you (?:able|capable) to do|"
+    r"what are your capabilities|what features do you have|what can you help with|"
+    r"what do you offer|what should i ask you|"
+    r"что ты умеешь|что ты можешь|что умеешь|на что ты способен|что ты делаешь|"
+    r"чем можешь помочь|чем можешь быть полезен|что вы умеете)\b",
+    re.IGNORECASE,
+)
+
+
+def _user_asks_capabilities(user_input: str) -> bool:
+    """True when the user asked what FOL can do — a capabilities answer is the
+    legitimate response, so a help-offer-shaped answer is allowed there."""
+    return bool(_CAPABILITY_QUESTIONS_RE.search(user_input or ""))
+
+
+def _generic_help_replacement(user_input: str, language: str | None = None) -> str:
+    """Honest replacement when the model answered a concrete question with a
+    generic offer of help: never hallucinate an answer, explain the limit and
+    offer the concrete things FOL can actually do (requirement: "If the model
+    genuinely cannot answer, explain why")."""
+    language = language or detect_language(user_input)
+    ru = language == "ru"
+    lower = (user_input or "").lower()
+
+    # Small talk still gets a natural companion reply (never a help offer).
+    if re.search(r"\b(how are you|how's it going|how are things|как дела|как ты|как настроение|что нового)\b", lower):
+        return (
+            "В полном порядке. Сервисы работают, инструменты на месте. Могу помочь "
+            "с кодом, браузером или просто составить компанию."
+            if ru
+            else "All good. Services are running, tools are ready. Happy to help "
+            "with code, the browser, or just keep you company."
+        )
+    if re.search(r"\b(who are you|what are you|кто ты|что ты такое|ты кто)\b", lower):
+        return (
+            "Я FOL, твой персональный ассистент. Могу работать с компьютером, искать "
+            "информацию, помнить важные вещи и помогать с проектами."
+            if ru
+            else "I'm FOL, your personal assistant. I can work with the computer, "
+            "find information, remember important things, and help with projects."
+        )
+    if re.search(r"\b(thank|спасибо|благодарю)\b", lower):
+        return "Всегда пожалуйста. Это моя работа." if ru else "You're welcome. It's what I'm here for."
+    if ru:
+        return (
+            "Хороший вопрос. Прямого ответа у меня сейчас нет — могу поискать это "
+            "в интернете, проверить память или открыть нужное приложение. Что сделать?"
+        )
+    return (
+        "Good question. I don't have a direct answer right now, but I can search the "
+        "web, check memory, or open what you need. What should I do?"
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -840,6 +991,21 @@ def humanize_error(error: Any, language: str | None = None) -> str:
     )
 
 
+def dedupe_repeated_sentences(text: str) -> str:
+    """Collapse consecutive repeated sentences ("How can I help you? How can I
+    help you?" → one). Small models sometimes stutter the same sentence."""
+    if not text:
+        return text
+    sentences = re.split(r"(?<=[.!?])\s+", text.strip())
+    out: list[str] = []
+    for sent in sentences:
+        key = sent.strip().lower()
+        if out and key == out[-1].strip().lower():
+            continue
+        out.append(sent)
+    return " ".join(out).strip()
+
+
 # ---------------------------------------------------------------------------
 # Main entry — polish a final response
 # ---------------------------------------------------------------------------
@@ -947,6 +1113,16 @@ def polish_response(
     ):
         return contextual_confirmation(user_input, tool_name, tool_args, language)
 
+    # Generic offer-of-help ("How can I help you?" / "Чем могу помочь?") is a
+    # greeting-like non-answer — NEVER acceptable for a concrete question.
+    # Allowed only when the user just greeted FOL or asked about capabilities.
+    if (
+        _is_generic_help_offer(cleaned)
+        and not _is_pure_greeting(user_input)
+        and not _user_asks_capabilities(user_input)
+    ):
+        return _generic_help_replacement(user_input, language)
+
     # Robotic honorific: "Done, sir." / "Открыл Safari, сэр." — strip the
     # honorific; if the remainder is still terse it gets rebuilt above, and
     # otherwise we show the natural sentence without the honorific.
@@ -954,7 +1130,7 @@ def polish_response(
     if is_terse_response(cleaned):
         return contextual_confirmation(user_input, tool_name, tool_args, language)
 
-    return cleaned
+    return dedupe_repeated_sentences(cleaned)
 
 
 def _strip_honorific(text: str) -> str:

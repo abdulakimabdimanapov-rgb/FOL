@@ -6,11 +6,14 @@ import logging
 from typing import Any
 
 from modules.llm.base import AbstractLLMBackend, LLMResponse
-from modules.llm.backends.mlx_backend import MLXBackend
 from modules.llm.backends.openai_backend import OPENROUTER_BASE_URL, OpenAIBackend
 from modules.llm.backends.anthropic_backend import AnthropicBackend
 from modules.llm.language import detect_language, get_lang_prompt_hint
 from modules.llm.personality import FOL_PERSONALITY_SYSTEM_PROMPT
+
+# POLICY: FOL does not use local LLMs (MLX inference, Ollama, model files).
+# Reasoning goes through Freebuff / API providers only; MLX stays for STT
+# (mlx-whisper) — that is speech recognition, not LLM inference.
 
 logger = logging.getLogger(__name__)
 
@@ -19,6 +22,9 @@ You are running on a MacBook Air M2. You are helpful, conversational, and proact
 Always address the user by name if known, otherwise use "sir" / "босс".
 You can manage windows and programs on macOS.
 If you need to perform actions on the computer, describe what you will do.
+Answer the user's actual question DIRECTLY with a concrete, useful answer.
+Never respond with a generic offer of help ("How can I help you?", "Чем могу помочь?") unless the user just greeted you.
+If you cannot answer, say so and offer to search — do not deflect with a greeting.
 """
 
 # Personality block — appended to every LLM call so FOL always behaves like
@@ -32,21 +38,16 @@ class LLMEngine:
     def __init__(self, config: dict[str, Any] | None = None) -> None:
         self._config = config or {}
         self._backends: dict[str, AbstractLLMBackend] = {}
-        self._primary_backend: str = self._config.get("llm_backend", "mlx")
+        # Default primary is a cloud backend; "mlx" is not accepted anymore
+        # (local LLMs are removed by policy).
+        requested = self._config.get("llm_backend", "openrouter")
+        self._primary_backend: str = requested if requested != "mlx" else "openrouter"
         # Build fallback order: primary first, then others
-        all_backends = ["openrouter", "mlx", "openai", "anthropic"]
+        all_backends = ["openrouter", "openai", "anthropic"]
         self._fallback_order: list[str] = [self._primary_backend] + [b for b in all_backends if b != self._primary_backend]
 
     async def initialize(self) -> None:
-        """Initialize configured backends based on config."""
-        # MLX — only if backend is mlx or as fallback
-        mlx_model = self._config.get("llm_model", "mlx-community/Qwen2.5-0.5B-Instruct-4bit")
-        # Don't use gpt-4o as MLX model name
-        if not mlx_model.startswith("gpt-") and not mlx_model.startswith("claude-"):
-            mlx = MLXBackend(model_name=mlx_model)
-            await mlx.initialize()
-            self._backends["mlx"] = mlx
-
+        """Initialize configured backends based on config (API providers only)."""
         # OpenRouter if key provided (OpenAI-compatible endpoint)
         openrouter_key = self._config.get("openrouter_api_key", "")
         if openrouter_key:
@@ -136,7 +137,7 @@ class LLMEngine:
 
             logger.warning("Backend %s failed, trying next", backend_name)
 
-        return "All LLM backends are unavailable. Please configure an API key or install mlx-lm."
+        return "All LLM backends are unavailable. Please configure an API key in .env (OpenRouter / OpenAI / Anthropic)."
 
     def _auto_temperature(self, user_input: str) -> float:
         """Auto-select temperature based on query type.
