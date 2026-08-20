@@ -11,13 +11,13 @@
 
 | Метрика | Значение |
 |---|---|
-| Код | FOL 22.5k строк / 189 файлов, SecondSelf 7.3k / 39, orchestrator 6.2k, Next.js 4.9k, obsidian 2.2k |
+| Код | FOL 22.5k строк / 189 файлов, fol-app 7.3k / 39, orchestrator 6.2k, Next.js 4.9k, obsidian 2.2k |
 | Тесты | **1001 passed** (корневые) + **560 passed** (FOL) = **1561**, 0 failed |
 | Swift build | ✅ Build complete |
 | Сервисы | :8420 orchestrator ✅, :8421 agent ✅, :8754 FOL ✅, :8000 uvicorn ✅, :3000 Next.js свободен |
 | Git | чистое дерево (кроме untracked Release/ и внешних папок), секреты в `.gitignore` |
 | Установщик | `Release/Second-Self-1.0.0.pkg` (4.1M) ✅, приложение запущено |
-| Симлинк | `~/second-self → Desktop/SecondSelf` — сервисы читают тот же код, что мы правим ✅ |
+| Симлинк | `~/second-self → Desktop/Fol` — сервисы читают тот же код, что мы правим ✅ |
 
 **Главная философия уже работает:** FOL — это не набор команд, а ядро, которое понимает речь,
 помнит контекст, видит экран, выполняет действия и отвечает естественно. Критичных багов,

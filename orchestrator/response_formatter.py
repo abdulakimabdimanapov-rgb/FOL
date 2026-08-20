@@ -727,6 +727,143 @@ def _natural_final_fallback(language: str) -> str:
     )
 
 
+# ---------------------------------------------------------------------------
+# Generic offer-of-help detection — small local models (Ollama) default to
+# "How can I help you?" / "Чем могу помочь?" instead of answering a concrete
+# question. That greeting-like non-answer must never be the final response.
+# ---------------------------------------------------------------------------
+
+_GREETING_WORDS_RE = re.compile(
+    r"\b(hi|hello|hey|yo|howdy|good (?:morning|afternoon|evening)|good night|"
+    r"привет|здравствуй|здравствуйте|добрый (?:день|вечер|утро)|доброе утро|доброй ночи)\b",
+    re.IGNORECASE,
+)
+
+_GENERIC_HELP_OFFER_RE = re.compile(
+    r"^\s*"
+    r"(?:"
+    r"(?:hi|hello|hey|yo|howdy|good (?:morning|afternoon|evening)|good night|"
+    r"привет|здравствуй(?:те)?|добрый (?:день|вечер|утро)|доброе утро|доброй ночи)"
+    r"[,.!\s]+"
+    r")?"
+    r"(?:"
+    r"how (?:can|may) i (?:help|assist) you"
+    r"|how can i be of assistance"
+    r"|what can i (?:help you with|do for you|do to help)"
+    r"|what do you (?:need|want) (?:help with|me to do)"
+    r"|what would you like (?:me to do|to do)"
+    r"|is there anything (?:else )?i can (?:help you with|do for you)"
+    r"|let me know (?:how i can help|what you need|if you need anything)"
+    r"|i'?m here to help"
+    r"|i am here to help"
+    r"|how may i (?:help|assist) you today"
+    r"|чем (?:я )?могу (?:помочь|быть полезен|быть полезна|быть полезным)"
+    r"|чем (?:вам|тебе) помочь"
+    r"|чем помочь"
+    r"|как (?:я )?могу помочь"
+    r"|что (?:я )?могу (?:сделать для вас|сделать для тебя|для вас сделать)"
+    r"|скажите?,? чем помочь"
+    r"|я здесь,? чтобы помочь"
+    r")"
+    r"(?:\s*(?:today|now|please|сегодня|сейчас|пожалуйста))?"
+    r"[\s.,!?;:)…-]*$",
+    re.IGNORECASE,
+)
+
+
+def _is_generic_help_offer(text: str) -> bool:
+    """True when ``text`` is essentially only a generic offer of help."""
+    t = (text or "").strip()
+    if not t or len(t) > 220:
+        return False
+    t = dedupe_repeated_sentences(t)
+    t = re.sub(r"[\W_]+$", "", t)
+    return _GENERIC_HELP_OFFER_RE.match(t) is not None
+
+
+_COMMAND_VERBS = frozenset({
+    "открой", "откройте", "запусти", "запустите", "сделай", "сделайте",
+    "найди", "найти", "поищи", "напиши", "написать", "создай", "покажи",
+    "включи", "выключи", "скажи", "расскажи", "запомни", "сохрани",
+    "open", "launch", "start", "run", "find", "search", "write", "create",
+    "show", "play", "tell", "remember", "save", "screenshot", "open",
+})
+
+
+def _is_pure_greeting(user_input: str | None) -> bool:
+    """True when the user's message is just a greeting / small talk."""
+    t = (user_input or "").strip().strip(".,!?")
+    if not _GREETING_WORDS_RE.search(t.lower()):
+        return False
+    words = [w for w in re.findall(r"[a-zа-яё]{2,}", t.lower())
+             if w not in ("пожалуйста", "please", "there", "fol", "сэр", "sir")]
+    if any(w in t.lower() for w in _COMMAND_VERBS):
+        return False
+    if "?" in t or any(w in t.lower() for w in ("что", "как", "какой", "какая", "which",
+                                                "what", "how", "when", "where", "why", "who")):
+        return len(words) <= 2
+    return len(words) <= 3
+
+
+_CAPABILITY_QUESTIONS_RE = re.compile(
+    r"\b(?:what can you do|what do you do|what are you (?:able|capable) to do|"
+    r"what are your capabilities|what features do you have|what can you help with|"
+    r"what do you offer|what should i ask you|"
+    r"что ты умеешь|что ты можешь|что умеешь|на что ты способен|что ты делаешь|"
+    r"чем можешь помочь|чем можешь быть полезен|что вы умеете)\b",
+    re.IGNORECASE,
+)
+
+
+def _user_asks_capabilities(user_input: str | None) -> bool:
+    return bool(_CAPABILITY_QUESTIONS_RE.search(user_input or ""))
+
+
+def _generic_help_replacement(user_input: str, language: str) -> str:
+    """Honest replacement when the model answered a concrete question with a
+    generic offer of help — explain the limit and offer concrete next steps."""
+    lower = (user_input or "").lower()
+    if re.search(r"\b(how are you|how's it going|how are things|как дела|как ты|как настроение|что нового)\b", lower):
+        return (
+            "В полном порядке. Сервисы работают, инструменты на месте. Могу помочь "
+            "с кодом, браузером или просто составить компанию."
+            if language == "ru"
+            else "All good. Services are running, tools are ready. Happy to help "
+            "with code, the browser, or just keep you company."
+        )
+    if re.search(r"\b(who are you|what are you|кто ты|что ты такое|ты кто)\b", lower):
+        return (
+            "Я FOL, твой персональный ассистент. Могу работать с компьютером, искать "
+            "информацию, помнить важные вещи и помогать с проектами."
+            if language == "ru"
+            else "I'm FOL, your personal assistant. I can work with the computer, "
+            "find information, remember important things, and help with projects."
+        )
+    if language == "ru":
+        return (
+            "Хороший вопрос. Прямого ответа у меня сейчас нет — могу поискать это "
+            "в интернете, проверить память или открыть нужное приложение. Что сделать?"
+        )
+    return (
+        "Good question. I don't have a direct answer right now, but I can search the "
+        "web, check memory, or open what you need. What should I do?"
+    )
+
+
+def dedupe_repeated_sentences(text: str) -> str:
+    """Collapse consecutive repeated sentences (small-model stutter)."""
+    if not text:
+        return text
+    sentences = re.split(r"(?<=[.!?])\s+", text.strip())
+    out: list[str] = []
+    for sent in sentences:
+        key = sent.strip().lower()
+        if out and key == out[-1].strip().lower():
+            continue
+        out.append(sent)
+    return " ".join(out).strip()
+
+
 def format_final_response(
     text: str | None,
     executed_tools: list[tuple[str, dict[str, Any]]] | None = None,
@@ -770,8 +907,17 @@ def format_final_response(
             if language == "ru"
             else "I can't give a full answer right now — the service is temporarily unavailable. Please try again in a minute."
         )
+    # Generic offer-of-help ("How can I help you?" / "Чем могу помочь?") is a
+    # greeting-like non-answer — never the final response to a real question.
+    # Allowed only when the user just greeted FOL or asked about capabilities.
+    if (
+        _is_generic_help_offer(clean)
+        and not _is_pure_greeting(user_input)
+        and not _user_asks_capabilities(user_input)
+    ):
+        return _generic_help_replacement(user_input or "", language)
     if clean and not _is_bare_confirmation(clean):
-        return clean
+        return dedupe_repeated_sentences(clean)
 
     for tool_name, args in reversed(list(executed_tools or [])):
         if tool_name.startswith("render_"):

@@ -1,11 +1,16 @@
-"""Compatibility bridge — orchestrator ↔ canonical FOL LLMRouter.
+"""Compatibility bridge — orchestrator ↔ BrainInterface ↔ canonical router.
 
 Phase 3: the orchestrator previously called the legacy ``analyze/_llm_async``
 module directly (``llm_astream`` / ``llm_acompletion`` /
 ``llm_completion_sync``). This bridge keeps those exact names and event
-contracts while delegating to the canonical ``LiteLLMRouter`` from
-``fol/modules/llm/router.py`` — the single LLM routing abstraction
-(local / cloud / fallback through one contract).
+contracts while delegating to the canonical brain — ``BrainInterface`` via
+``CurrentLLMAdapter`` (``fol/modules/llm/brain.py``) — which in turn
+forwards to the canonical ``LiteLLMRouter`` from ``fol/modules/llm/router.py``
+(the single LLM routing abstraction: local / cloud / fallback through one
+contract). The bridge is the compatibility layer that lets every existing
+consumer (``orchestrator/server.py``, ``suggestion_engine``, ``analyze/*``,
+``obsidian/*``, ``src/synthesis/profile.py``) sit on the ONE canonical
+internal abstraction without changing their call sites.
 
 Contract parity (identical to ``analyze/_llm_async``):
   - ``llm_astream(...)``     → async generator yielding
@@ -45,7 +50,7 @@ if str(_FOL_DIR) not in sys.path:
 # Load the project .env explicitly (same file server.py loads) so the chain
 # resolves regardless of the process working directory.
 _PROJECT_ROOT = Path(__file__).resolve().parent.parent
-load_dotenv(_PROJECT_ROOT / ".env")
+load_dotenv(_PROJECT_ROOT / ".env", override=True)
 
 
 class FallbackRecorder:
@@ -104,6 +109,32 @@ def _legacy() -> Any:
     return _llm_async
 
 
+def _brain() -> Any:
+    """The canonical brain backend, chosen via ``get_brain()`` so that
+    ``FOL_BRAIN`` (current / freebuff) reaches the bridge. Returns ``None``
+    when the canonical router is unavailable, in which case the bridge falls
+    back to the legacy adapter.
+
+    ``BrainConfigurationError`` (e.g. ``FOL_BRAIN=freebuff`` while Freebuff
+    has no programmatic interface) is re-raised: an explicit backend choice
+    must fail loudly, never silently fall back.
+    """
+    router = _canonical_router()
+    if router is None:
+        return None
+    try:
+        from modules.llm.brain import BrainConfigurationError, get_brain
+
+        return get_brain(router=router)
+    except BrainConfigurationError:
+        raise
+    except Exception as exc:  # pragma: no cover - defensive
+        logger.warning(
+            "BrainInterface unavailable (%s) — using legacy analyze/_llm_async", exc
+        )
+        return None
+
+
 # ---------------------------------------------------------------------------
 # Streaming — same event contract as analyze/_llm_async.llm_astream
 # ---------------------------------------------------------------------------
@@ -122,14 +153,14 @@ async def llm_astream(
         {"type": "done", "stop_reason": "end_turn" | "tool_use"}
         {"type": "error", "message": "..."}
     """
-    router = _canonical_router()
-    if router is None:
+    brain = _brain()
+    if brain is None:
         async for event in _legacy().llm_astream(
             messages, system=system, tools=tools, max_tokens=max_tokens
         ):
             yield event
         return
-    async for event in router.astream(
+    async for event in brain.chat_stream(
         messages, system=system, tools=tools, max_tokens=max_tokens
     ):
         yield event
@@ -154,8 +185,8 @@ async def llm_acompletion(
     the raw LiteLLM stream (the canonical router exposes streaming through
     ``astream`` instead).
     """
-    router = _canonical_router()
-    if router is None or stream:
+    brain = _brain()
+    if brain is None or stream:
         return await _legacy().llm_acompletion(
             messages,
             system=system,
@@ -164,7 +195,7 @@ async def llm_acompletion(
             temperature=temperature,
             stream=stream,
         )
-    return await router.acomplete(
+    return await brain.acomplete(
         messages, system=system, tools=tools, max_tokens=max_tokens, temperature=temperature
     )
 
@@ -179,10 +210,16 @@ def llm_completion_sync(
     max_tokens: int | None = None,
 ) -> str:
     """Synchronous LLM completion. Returns text string or empty on failure."""
-    router = _canonical_router()
-    if router is None:
+    brain = _brain()
+    if brain is None:
         return _legacy().llm_completion_sync(messages, system=system, max_tokens=max_tokens)
-    return router.complete_sync(messages, system=system, max_tokens=max_tokens)
+    from modules.llm.brain import BrainError
+
+    try:
+        return brain.chat(messages, system=system, max_tokens=max_tokens)
+    except BrainError:
+        # Legacy contract: empty string on total failure (no raise).
+        return ""
 
 
 # ---------------------------------------------------------------------------
@@ -191,9 +228,9 @@ def llm_completion_sync(
 
 def _get_model_chain() -> list[str]:
     """Ordered list of models that would be tried (primary first)."""
-    router = _canonical_router()
-    if router is not None:
-        return router.model_chain()
+    brain = _brain()
+    if brain is not None:
+        return brain.model_chain()
     return _legacy()._get_model_chain()
 
 
@@ -211,9 +248,9 @@ def _get_api_key_for_model(model: str) -> str | None:
 
 def available_providers() -> list[str]:
     """Human-readable list of configured providers."""
-    router = _canonical_router()
-    if router is not None:
-        return router.available_providers()
+    brain = _brain()
+    if brain is not None:
+        return brain.available_providers()
     return sorted({m.split("/", 1)[0] for m in _get_model_chain()})
 
 
@@ -229,9 +266,9 @@ def last_fallback_error() -> str:
 
 def test_connection() -> str:
     """Quick connectivity test — returns a status string, never raises."""
-    router = _canonical_router()
-    if router is not None:
-        return router.test_connection()
+    brain = _brain()
+    if brain is not None:
+        return brain.test_connection()
     return _legacy().test_connection()
 
 

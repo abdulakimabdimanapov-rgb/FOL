@@ -12,6 +12,15 @@ import pytest
 import analyze._llm_async as llm_async
 
 
+@pytest.fixture(autouse=True)
+def _enable_local_for_legacy_fallback_tests(monkeypatch):
+    """These pre-policy tests exercise fallback mechanics with ollama models;
+    explicitly re-enable local LLMs so the mechanics stay covered (the policy
+    itself is enforced in fol/modules/llm/router.py and its tests)."""
+    monkeypatch.setenv("FOL_ENABLE_LOCAL_LLM", "1")
+    yield
+
+
 def _run(coro) -> Any:
     """Run an async function to completion in a fresh event loop."""
     return asyncio.run(coro)

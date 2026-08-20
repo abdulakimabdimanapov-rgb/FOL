@@ -33,9 +33,10 @@ class Settings(BaseSettings):
     stt_device: str = "mps"
     stt_language: str = "ru"
 
-    # LLM
-    llm_backend: str = "mlx"
-    llm_model: str = "mlx-community/Llama-3.2-3B-Instruct-4bit"
+    # LLM — API providers only. Local LLMs (Ollama / MLX inference) are
+    # removed from FOL by policy: FOL does not run models on its own hardware.
+    llm_backend: str = "openrouter"
+    llm_model: str = "openrouter/nvidia/nemotron-3-ultra-550b-a55b:free"
     llm_max_tokens: int = 4096
     llm_temperature: float = 0.7
 
@@ -60,6 +61,10 @@ class Settings(BaseSettings):
     # FOL читает Profile/Goals/Models/Conversations из этого vault и дописывает
     # туда свои диалоги, чтобы любой ассистент видел, что делал FOL.
     brain_vault: str = str(Path.home() / "Obsidian" / "Brain")
+
+    # Brain Backend — Freebuff via OpenRouter as primary reasoning brain.
+    # FOL_BRAIN_AUTO_START=true: auto-check Freebuff availability on startup.
+    brain_auto_start: bool = True
 
     # Telegram Integration
     telegram_bot_token: str = ""

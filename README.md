@@ -1,157 +1,181 @@
-# FOL — Персональный AI-ассистент для macOS (JARVIS)
+# FOL — Personal AI Assistant for macOS
 
-> **v1.0.0** — рабочий, протестированный релиз: **2049+ тестов зелёные**, E2E 14/14, macOS-приложение собирается.
+> **v1.2.0** — Production-ready release: **1073+ tests passing**, brain backends (Codebuff/Freebuff), security hardening (race condition, shell injection, memory leak fixes).
 
-FOL — **цифровой двойник**: AI-ассистент, который живёт в вырезе MacBook (Notch UI),
-понимает контекст экрана, помнит о вас и выполняет действия на компьютере.
+FOL is a **digital twin**: an AI assistant that lives in your MacBook's notch, understands screen context, remembers you, and performs actions on your computer.
 
-**Проблема, которую решает FOL:** повседневная работа за компьютером состоит из
-повторяющихся действий, повторного объяснения контекста и постоянного переключения
-между приложениями — это и есть «трение» (friction), которое отнимает время.
+**The problem FOL solves:** everyday computer work is full of repetitive actions, re-explaining context, and constant app-switching — that's "friction" stealing your time.
 
-**Решение — три направления:**
+**Solution — three pillars:**
 
-| Направление | Что даёт |
+| Pillar | What it does |
 |---|---|
-| **1. Desktop automation** | Пользователь не тратит время на повторяющиеся действия в macOS — FOL открывает приложения, ищет в браузере, работает с файлами и кликами |
-| **2. Context + Memory** | FOL помнит контекст и предпочтения — не нужно постоянно объяснять одно и то же |
-| **3. Proactive assistance** | FOL сам замечает полезный контекст и предлагает действие, не дожидаясь команды |
+| **1. Desktop automation** | FOL opens apps, searches the browser, works with files and clicks — you stop wasting time on repetitive macOS tasks |
+| **2. Context + Memory** | FOL remembers context and preferences — no need to explain the same thing over and over |
+| **3. Proactive assistance** | FOL notices useful context on its own and suggests actions without waiting for a command |
 
 ---
 
-## Быстрый старт
+## Quick Start
 
 ```bash
-# 1. Настройте .env (см. .env.example — ключи пустые, безопасно)
-cp .env.example .env
+# 1. Set up .env (see .env.template — keys are empty, safe to share)
+cp .env.template .env
 
-# 2. Установите зависимости
+# 2. Install dependencies
 pip install -r requirements.txt
 
-# 3. Запустите все сервисы
+# 3. Start all services
 ./run_all.sh
 
-# 4. Проверьте
+# 4. Verify
 curl http://localhost:8420/status     # Orchestrator
-curl http://localhost:8421/health     # Agent Server (десктоп-контроль)
-curl http://localhost:8754/health     # FOL API (JARVIS-команды)
+curl http://localhost:8421/health     # Agent Server (desktop control)
+curl http://localhost:8754/health     # FOL API (JARVIS commands)
 ```
 
-Запуск по отдельности: `./run_all.sh orchestrator | agent | fol | swift | web`.
+Start individually: `./run_all.sh orchestrator | agent | fol | swift | web`.
 
-### LLM — одна строка в `.env`
+### Policy: FOL Does NOT Use Local LLMs
+
+> **We deliberately chose against local AI (Ollama, MLX inference, local model files, local fallback providers).** FOL doesn't run models on your hardware, doesn't heat up your Mac, and doesn't eat its memory — all reasoning happens through cloud APIs (Freebuff / OpenRouter / OpenAI / Anthropic). Only local STT (mlx-whisper) stays for speech recognition — that's not an LLM.
+
+### LLM — One Line in `.env` (API Providers Only)
 
 ```env
-LLM_MODEL=ollama/llama3.2:3b                          # локально, бесплатно
-# или LLM_MODEL=openrouter/nvidia/nemotron-3-super-120b-a12b:free
-LLM_FALLBACK_MODELS=ollama/llama3.2:3b                # автопереключение при сбое
+LLM_MODEL=openrouter/nvidia/nemotron-3-super-120b-a12b:free
+# or LLM_MODEL=openai/gpt-4o-mini, LLM_MODEL=claude-sonnet-4-20250514
+LLM_FALLBACK_MODELS=openrouter/nvidia/nemotron-3-ultra-550b-a55b:free   # fallback chain
+FOL_BRAIN=current        # current = LiteLLMRouter (API-only) | freebuff = Freebuff Brain
 ```
 
-Если основная модель недоступна (квота/аутэдж), ассистент автоматически пробует
-модели из `LLM_FALLBACK_MODELS` по очереди — система работает, пока доступна хотя
-бы одна модель.
-
-### Локально через Ollama (бесплатно, без API-ключей)
-
-```bash
-brew install ollama
-ollama serve &                    # или: brew services start ollama
-ollama pull llama3.2:3b           # ~2 GB, одна команда
-```
-
-Затем в `.env`: `LLM_MODEL=ollama/llama3.2:3b`. Это рекомендуемый способ для
-первого запуска — никакие платные ключи не нужны.
+If the primary model is unavailable (quota/outage), the assistant automatically tries models from `LLM_FALLBACK_MODELS` in order — the system works as long as at least one model is reachable. Local models (`ollama/…`, MLX) are automatically excluded from the chain (re-enable only with explicit `FOL_ENABLE_LOCAL_LLM=1` — not recommended).
 
 ---
 
-## Демо-сценарии (проверены end-to-end)
+## Demo Scenarios (Verified End-to-End)
 
 ```bash
-./scripts/demo.sh                  # 5 сценариев с паузами для записи видео
-DEMO_QUICK=1 ./scripts/demo.sh     # без пауз (проверка)
-./scripts/verify_scenarios.sh      # авто-проверка сценариев
-python3 scripts/e2e_check.py       # E2E: сервисы + health + MJPEG + SSE
+./scripts/demo.sh                  # 5 scenarios with pauses for recording
+DEMO_QUICK=1 ./scripts/demo.sh     # no pauses (quick check)
+./scripts/verify_scenarios.sh      # auto-verify scenarios
+python3 scripts/e2e_check.py       # E2E: services + health + MJPEG + SSE
 ```
 
-| Сценарий | Как работает |
+| Scenario | How it works |
 |---|---|
-| «Открой Safari и найди новости об OpenAI» | открывает Safari → ищет → сводка |
-| «Напиши письмо преподавателю» | контакт / Google OAuth |
-| «Создай событие в календаре» | `create_event` через Google Calendar |
-| «Открой проект FOL» | Finder + клавиатурные команды |
-| «Запомни, что завтра отправить отчёт» | `save_to_obsidian` → живая память |
+| "Open Safari and find OpenAI news" | Opens Safari → searches → summary |
+| "Write a letter to the professor" | Contact / Google OAuth |
+| "Create a calendar event" | `create_event` via Google Calendar |
+| "Open the FOL project" | Finder + keyboard commands |
+| "Remember to send the report tomorrow" | `save_to_obsidian` → live memory |
 
 ---
 
-## Архитектура
+## Architecture
 
 ```
-Пользователь (Notch UI / Web / Голос)
+User (Notch UI / Web / Voice)
       │
       ▼
 Orchestrator (FastAPI, :8420)
-      │   роутер 6 агентов (General/Architect/Coder/Reviewer/Researcher/Memory)
-      │   двухэтапный выбор инструментов (категория → 5-12 из 50)
-      │   loop guard (защита от зацикливания)
+      │   Router with 6 agents (General/Architect/Coder/Reviewer/Researcher/Memory)
+      │   Two-stage tool selection (category → 5-12 from 50)
+      │   Loop guard (anti-cycling protection)
       ▼
-LLM (LiteLLM: OpenRouter / Ollama / OpenAI) — фолбэк-цепочка моделей
+LLM (LiteLLM: OpenRouter / OpenAI / Anthropic / …) — model fallback chain
       │   tool calls
       ▼
-Execution: Agent Server (:8421, десктоп/браузер) · Productivity (Gmail/Calendar)
-           · Obsidian (память) · FOL API (:8754, JARVIS)
+Execution: Agent Server (:8421, desktop/browser) · Productivity (Gmail/Calendar)
+           · Obsidian (memory) · FOL API (:8754, JARVIS)
       │
       ▼
-Результат → LLM → финальный ответ (SSE-стриминг в UI)
+Result → LLM → final answer (SSE streaming to UI)
 ```
 
-Ключевые механизмы:
-- **ToolRegistry** (`fol/modules/tools/registry.py`) — единый реестр всех 50 инструментов: схема, риск, подтверждение.
-- **ConfirmationGate** (`fol/modules/tools/gate.py`) — код решает, никогда модель: опасные действия блокируются до подтверждения пользователя, подтверждение привязано к точной сигнатуре вызова.
-- **Двухэтапный выбор инструментов** — модель видит 5–12 релевантных инструментов, а не все 50.
-- **Loop guard** — повторный одинаковый вызов N раз прерывается.
-- **Memory** — identity / preferences / episodic + Obsidian vault + daily tracker; контекст внедряется в каждый запрос LLM.
-- **Proactive Mode** — `suggestion_engine` (profile/pattern/ambient) + ambient-цикл 30с + переключатель `proactive on/off` в FOL API.
-- **Безопасность** — `.env` не отслеживается Git, секреты вычищаются из логов и дашборда, неизвестные инструменты отклоняются (fail closed).
+Key mechanisms:
+- **ToolRegistry** (`fol/modules/tools/registry.py`) — single registry for all 50 tools: schema, risk, confirmation.
+- **ConfirmationGate** (`fol/modules/tools/gate.py`) — code decides, never the model: dangerous actions are blocked until user confirms; confirmation is bound to the exact call signature.
+- **Two-stage tool selection** — the model sees 5–12 relevant tools, not all 50.
+- **Loop guard** — repeated identical calls N times are interrupted.
+- **Memory** — identity / preferences / episodic + Obsidian vault + daily tracker; context is injected into every LLM request.
+- **Proactive Mode** — `suggestion_engine` (profile/pattern/ambient) + ambient cycle 30s + `proactive on/off` toggle in FOL API.
+- **Security** — `.env` is not tracked by Git, secrets are scrubbed from logs and dashboard, unknown tools are rejected (fail closed).
 
-## Структура проекта
+## Project Structure
 
 ```
-fol/                       # Python AI-ядро FOL (JARVIS API :8754)
+fol/                       # Python AI core (JARVIS API :8754)
   ├── core/ modules/ api/ config/ plugins/ tests/
-orchestrator/              # FastAPI AI-сервер (:8420): агенты, tools, память
-agent-server/              # Десктоп/браузер контроль (:8421)
-SecondSelf/                # SwiftUI macOS приложение (Notch UI, голос)
-src/                       # Next.js web интерфейс (SSE-чат)
+orchestrator/              # FastAPI AI server (:8420): agents, tools, memory
+agent-server/              # Desktop/browser control (:8421)
+fol-app/                   # SwiftUI macOS app (Notch UI, voice)
+src/                       # Next.js web interface (SSE chat)
 auth/ fetch/ analyze/ clean/ utils/ context_engine/ obsidian/ dashboard/
 cookie_sync/ bridge/ setup/ scripts/ tests/ docs/
-run_all.sh                 # Единый лаунчер всех сервисов
+run_all.sh                 # Unified launcher for all services
 ```
 
-## Порты
+## Ports
 
-| Порт | Сервис |
-|------|--------|
-| 8420 | Orchestrator (AI-сервер, SSE) |
-| 8421 | Agent Server (десктоп/браузер) |
-| 8754 | FOL API (JARVIS-команды) |
+| Port | Service |
+|------|---------|
+| 8420 | Orchestrator (AI server, SSE) |
+| 8421 | Agent Server (desktop/browser) |
+| 8754 | FOL API (JARVIS commands) |
 | 3000 | Next.js web |
-| 11434 | Ollama (локальный LLM, опционально) |
 
-## Качество
+---
 
-- **2049+ тестов, 0 падений** — `python3 -m pytest tests/` (1168), `python3 -m pytest fol/tests/` (810), orchestrator-local (71)
-- **E2E 14/14** — `python3 scripts/e2e_check.py` (сервисы, health, MJPEG, SSE, без утечек tool-call)
-- **macOS-сборка** — `cd SecondSelf && swift build` ✓, `./build-app.sh` → `build/Second Self.app`
-- CI: `.github/workflows/test.yml` (pytest + синтаксис + Swift build)
+## Tests
 
-## Безопасность (перед шиппингом)
+```bash
+# Run all tests
+python -m pytest tests/ -v          # 1073+ passed (FOL core)
+python3 -m pytest fol/tests/ -v     # Full FOL test suite
 
-- Неизвестные инструменты → fail closed (`GateDecision.REJECT`)
-- Опасные инструменты → подтверждение пользователя, привязанное к аргументам
-- Модель не может подтвердить сама себя — решает код
-- Shell-подобные `fol_command` → всегда подтверждение
-- Секреты не попадают в память/логи/дашборд; API-ключи не коммитятся (`.gitignore`)
+# Bilingual router (Russian + English)
+python3 -m pytest tests/test_router.py -v -k "russian"
+python3 -m pytest tests/test_router.py -v -k "bilingual"
+python3 -m pytest tests/test_router.py -v -k "fuzzy"
 
-## Лицензия
+# Text normalization
+python3 -m pytest tests/test_normalize.py -v -k "russian"
 
-MIT — см. [LICENSE](LICENSE).
+# Swift build
+cd fol-app && swift build
+```
+
+---
+
+## Bilingual Routing (Russian + English)
+
+FOL understands both Russian and English commands with a sophisticated routing pipeline:
+
+```
+User input → Greeting detection → Bilingual split → Keyword match → Fuzzy match → History → General
+```
+
+| Agent | EN keywords | RU keywords |
+|-------|------------|-------------|
+| **Architect** | architecture, design pattern, system design, roadmap | архитектур, спроектир, схема, тз |
+| **Reviewer** | review, check, code review, audit, vulnerability | провер, ревью, качеств, аудит |
+| **Coder** | implement, write code, pull request, refactor | напиш, код, создай, баг, тест |
+| **Researcher** | search, find, what is, explain | найд, поищ, ищи, гугл |
+| **Memory** | remember, save, note, obsidian, remind | запомн, сохран, заметк, напомн |
+
+---
+
+## Security
+
+- Unknown tools → fail closed (`GateDecision.REJECT`)
+- Dangerous tools → user confirmation required, bound to exact call signature
+- The model cannot self-approve — code decides
+- Shell-like `fol_command` → always requires confirmation
+- Secrets never reach memory/logs/dashboard; API keys not committed (`.gitignore`)
+
+---
+
+## License
+
+MIT — see [LICENSE](LICENSE).

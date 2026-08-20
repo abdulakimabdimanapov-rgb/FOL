@@ -154,14 +154,24 @@ class TestBrainInterfaceCompatibility:
 
 
 class TestSelectionInvariant:
-    def test_freebuff_selection_still_fails_clearly(self, monkeypatch):
-        """Explicit Freebuff must NEVER silently become another brain."""
+    def test_freebuff_selection_works_with_openrouter(self, monkeypatch):
+        """get_brain('freebuff') returns a BrainRouter when OPENROUTER is configured."""
+        from modules.llm.brain_router import BrainRouter
+        monkeypatch.setenv("OPENROUTER_API_KEY", "sk-or-test-key-12345")
         monkeypatch.setenv("FOL_BRAIN", "current")
-        with pytest.raises(BrainConfigurationError) as exc:
-            get_brain("freebuff")
-        assert "no public HTTP API" in str(exc.value) or "not a programmatic runtime backend" in str(exc.value)
+        brain = get_brain("freebuff")
+        assert isinstance(brain, BrainRouter)
 
-    def test_freebuff_env_still_fails_clearly(self, monkeypatch):
+    def test_freebuff_selection_fails_without_key(self, monkeypatch):
+        """Explicit Freebuff fails when OPENROUTER_API_KEY is missing."""
+        monkeypatch.delenv("OPENROUTER_API_KEY", raising=False)
+        monkeypatch.setenv("FOL_BRAIN", "current")
+        with pytest.raises(BrainConfigurationError):
+            get_brain("freebuff")
+
+    def test_freebuff_env_fails_without_key(self, monkeypatch):
+        """FOL_BRAIN=freebuff fails when OPENROUTER_API_KEY is missing."""
+        monkeypatch.delenv("OPENROUTER_API_KEY", raising=False)
         monkeypatch.setenv("FOL_BRAIN", "freebuff")
         with pytest.raises(BrainConfigurationError):
             get_brain()

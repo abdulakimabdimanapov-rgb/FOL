@@ -1,7 +1,7 @@
 """Run FOL REST API server on port 8754.
 
 Usage:
-    # From SecondSelf/ directory:
+    # From fol-app/ directory:
     python fol/run_api_server.py
 """
 import os

@@ -145,35 +145,117 @@ async def speech_to_text(file: UploadFile = File(...)):
             tmp_path = tmp.name
             content = await file.read()
             tmp.write(content)
-        
-        # Transcribe using mlx-whisper (runs on Apple Silicon)
-        try:
-            import mlx_whisper
-            result = await asyncio.to_thread(
-                mlx_whisper.transcribe,
-                tmp_path,
-                temperature=0.0,
-                language="ru",
-            )
-            text = result.get("text", "").strip()
-        except ImportError:
-            logger.warning("mlx-whisper not installed, using Google STT fallback")
-            import speech_recognition as sr
-            recognizer = sr.Recognizer()
-            with sr.AudioFile(tmp_path) as source:
-                audio_data = recognizer.record(source)
-            try:
-                text = recognizer.recognize_google(audio_data, language="ru-RU")
-            except Exception:
-                text = recognizer.recognize_sphinx(audio_data)
-        
-        return {"text": text}
+
+        # Canonical STT path: ONE provider interface (local mlx-whisper by
+        # default, opt-in ElevenLabs cloud, automatic fallback). Contract is
+        # identical to the previous inline implementation.
+        from modules.input.voice import transcribe_audio
+
+        return await asyncio.to_thread(transcribe_audio, tmp_path)
     except Exception as exc:
         logger.error("STT endpoint error: %s", exc)
         return {"text": "", "error": str(exc)}
     finally:
         if tmp_path:
             Path(tmp_path).unlink(missing_ok=True)
+
+
+@app.post("/api/tts")
+async def text_to_speech(data: dict):
+    """Convert text to speech using FOL's TTS engine.
+
+    Request: {"text": "...", "voice": "optional", "rate": optional}
+    Response: {"ok": true} (speech is played on the server)
+    """
+    text = data.get("text", "")
+    if not text:
+        return {"ok": False, "error": "No text provided"}
+    voice = data.get("voice")
+    rate = data.get("rate")
+    try:
+        from modules.output.tts import get_tts
+        tts = get_tts(voice=voice, rate=rate)
+        if not tts.is_available:
+            return {"ok": False, "error": "TTS not available"}
+        result = await tts.speak(text)
+        return {"ok": result}
+    except Exception as exc:
+        logger.error("TTS endpoint error: %s", exc)
+        return {"ok": False, "error": str(exc)}
+
+
+@app.post("/api/voice/transcribe")
+async def voice_transcribe(file: UploadFile = File(...)):
+    """Transcribe audio using the unified VoiceEngine.
+
+    Same as /api/stt but uses the VoiceEngine abstraction.
+    """
+    if not file.filename:
+        return {"text": "", "error": "No file provided"}
+    tmp_path = None
+    try:
+        suffix = Path(file.filename).suffix or ".wav"
+        with tempfile.NamedTemporaryFile(suffix=suffix, delete=False) as tmp:
+            tmp_path = tmp.name
+            content = await file.read()
+            tmp.write(content)
+        from modules.input.voice.engine import VoiceEngine
+        engine = VoiceEngine()
+        text = await engine.transcribe_file(tmp_path)
+        return {"text": text}
+    except Exception as exc:
+        logger.error("Voice transcribe error: %s", exc)
+        return {"text": "", "error": str(exc)}
+    finally:
+        if tmp_path:
+            Path(tmp_path).unlink(missing_ok=True)
+
+
+@app.post("/api/memory/consolidate")
+async def consolidate_memory(data: dict):
+    """Run memory consolidation on daily work logs.
+
+    Request: {"date": "YYYY-MM-DD"} (optional, defaults to yesterday)
+    Response: {"ok": true, "result": {...}}
+    """
+    date = data.get("date")
+    try:
+        from modules.memory.consolidation import MemoryConsolidator
+        from modules.memory.brain import Brain
+        brain = Brain()
+        consolidator = MemoryConsolidator(brain=brain)
+        result = await consolidator.consolidate(date)
+        return {
+            "ok": True,
+            "date": result.date,
+            "lessons": len(result.lessons),
+            "facts": len(result.facts_learned),
+            "preferences": len(result.preferences_discovered),
+            "projects": len(result.project_updates),
+            "patterns": len(result.patterns),
+            "summary": result.summary,
+        }
+    except Exception as exc:
+        logger.error("Consolidation error: %s", exc)
+        return {"ok": False, "error": str(exc)}
+
+
+@app.post("/api/memory/lessons")
+async def get_lessons(data: dict):
+    """Get recent lessons from Brain/Lessons.md.
+
+    Request: {"limit": 20} (optional)
+    """
+    limit = data.get("limit", 20)
+    try:
+        from modules.memory.consolidation import MemoryConsolidator
+        from modules.memory.brain import Brain
+        brain = Brain()
+        consolidator = MemoryConsolidator(brain=brain)
+        lessons = consolidator.get_lessons(limit=limit)
+        return {"ok": True, "lessons": lessons}
+    except Exception as exc:
+        return {"ok": False, "error": str(exc)}
 
 
 @app.post("/api/obsidian/save")

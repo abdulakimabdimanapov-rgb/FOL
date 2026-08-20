@@ -38,6 +38,36 @@ logger = logging.getLogger(__name__)
 _DEFAULT_MAX_TOKENS = 4096
 _DEFAULT_MODEL = "claude-sonnet-4-20250514"
 
+# OpenRouter key rotation — when key 1 hits rate limit, switch to key 2
+_openrouter_key_index: int = 0
+_openrouter_rotation_reset: float = 0  # timestamp to reset back to key 1
+
+
+def _get_openrouter_key() -> str:
+    """Return the current OpenRouter API key with rotation support."""
+    global _openrouter_key_index, _openrouter_rotation_reset
+    import time as _time
+    now = _time.time()
+    if _openrouter_key_index > 0 and now > _openrouter_rotation_reset:
+        _openrouter_key_index = 0
+        logger.info("OpenRouter: rotated back to key 1 (cooldown expired)")
+    if _openrouter_key_index == 0:
+        key = os.environ.get("OPENROUTER_API_KEY", "")
+    else:
+        key = os.environ.get("OPENROUTER_API_KEY_2", "") or os.environ.get("OPENROUTER_API_KEY", "")
+    return key or ""
+
+
+def rotate_in_openrouter_key() -> None:
+    """Switch to the next OpenRouter API key (called on rate limit)."""
+    global _openrouter_key_index, _openrouter_rotation_reset
+    import time as _time
+    key2 = os.environ.get("OPENROUTER_API_KEY_2", "")
+    if key2 and _openrouter_key_index == 0:
+        _openrouter_key_index = 1
+        _openrouter_rotation_reset = _time.time() + 300  # reset after 5 min
+        logger.warning("OpenRouter: rate limited on key 1 — rotated to key 2")
+
 
 # ---------------------------------------------------------------------------
 # Configuration
@@ -65,21 +95,24 @@ def _get_api_key_for_model(model: str) -> str | None:
 
     # --- Prefix-based matches (check FIRST to avoid false positives) ---
     if model_lower.startswith("openrouter/") or model_lower.startswith("openrouter:"):
-        return os.environ.get("OPENROUTER_API_KEY")
+        return _get_openrouter_key()
     if any(model_lower.startswith(p) for p in ("ollama/", "local/", "vllm/")):
         return "local"  # No API key needed
 
     # --- Substring-based matches ---
     if model_lower.startswith("claude") or "anthropic" in model_lower:
         return os.environ.get("ANTHROPIC_API_KEY")
+    # Groq (check BEFORE OpenAI — groq/openai/gpt-oss-* must resolve to Groq)
+    if model_lower.startswith("groq/") or ("groq" in model_lower and "/openai" not in model_lower):
+        return os.environ.get("GROQ_API_KEY")
     if any(model_lower.startswith(p) for p in ("gpt", "o1", "o3")) or "openai" in model_lower:
         return os.environ.get("OPENAI_API_KEY")
     if "gemini" in model_lower:
         return os.environ.get("GEMINI_API_KEY")
     if "deepseek" in model_lower:
         return os.environ.get("DEEPSEEK_API_KEY")
-    if "groq" in model_lower:
-        return os.environ.get("GROQ_API_KEY")
+    if model_lower.startswith("xai/") or "grok" in model_lower:
+        return os.environ.get("XAI_API_KEY")
 
     return os.environ.get("OPENAI_API_KEY") or os.environ.get("ANTHROPIC_API_KEY")
 
@@ -101,9 +134,20 @@ def _get_model_chain() -> list[str]:
     fallbacks_raw = os.environ.get("LLM_FALLBACK_MODELS", "").strip()
     fallbacks = [m.strip() for m in fallbacks_raw.split(",") if m.strip()]
 
+    # POLICY: local LLMs (Ollama / MLX / vLLM / LM Studio) are removed from
+    # FOL — skipped unless explicitly re-enabled with FOL_ENABLE_LOCAL_LLM=1.
+    local_enabled = os.environ.get("FOL_ENABLE_LOCAL_LLM", "").strip().lower() in ("1", "true", "yes")
+    local_prefixes = ("ollama/", "local/", "vllm/", "lm-studio")
+
     chain: list[str] = []
     for model in [primary] + fallbacks:
         if model in chain:
+            continue
+        if not local_enabled and model.lower().startswith(local_prefixes):
+            logger.warning(
+                "Skipping local model %s: local LLMs are disabled (FOL_ENABLE_LOCAL_LLM=1 to enable)",
+                model,
+            )
             continue
         if _get_api_key_for_model(model) is None:
             logger.warning(
@@ -434,6 +478,12 @@ async def llm_acompletion(
             logger.error("litellm is not installed. Run: pip install litellm")
             return {"content": "", "tool_calls": [], "stop_reason": "error"}
         except Exception as exc:
+            # OpenRouter key rotation on rate limit
+            err_str = str(exc).lower()
+            if model.lower().startswith("openrouter/") and any(
+                p in err_str for p in ("rate_limit", "429", "too many requests")
+            ):
+                rotate_in_openrouter_key()
             logger.warning(
                 "LLM acompletion failed for %s, trying next model: %s",
                 model, exc,
@@ -578,6 +628,12 @@ async def llm_astream(
             yield {"type": "error", "message": "litellm not installed. Run: pip install litellm"}
             return
         except Exception as exc:
+            # OpenRouter key rotation on rate limit
+            err_str = str(exc).lower()
+            if model.lower().startswith("openrouter/") and any(
+                p in err_str for p in ("rate_limit", "429", "too many requests")
+            ):
+                rotate_in_openrouter_key()
             logger.warning(
                 "LLM astream failed for %s, trying next model: %s",
                 model, exc,

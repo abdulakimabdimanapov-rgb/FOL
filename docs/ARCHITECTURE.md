@@ -56,9 +56,10 @@ the canonical interfaces above.
   `LLMRouter` interface (`complete_sync` / `acomplete` / `astream` /
   `model_chain` / `available_providers` / `test_connection`), obtained via
   `get_llm_router()`.
-  - `LiteLLMRouter` — local (`ollama/…`, `local/…`) + cloud (OpenAI,
-    Anthropic, Gemini, OpenRouter, …) + **fallback chain**
-    (`LLM_MODEL` + `LLM_FALLBACK_MODELS`, providers without a key are skipped).
+  - `LiteLLMRouter` — cloud-only (OpenAI, Anthropic, Gemini, OpenRouter, …)
+    + **fallback chain** (`LLM_MODEL` + `LLM_FALLBACK_MODELS`, providers
+    without a key are skipped). Local providers (`ollama/…`, `local/…`,
+    MLX) are excluded by policy — see "No local LLMs" in README.
   - `EngineBackendRouter` — adapter over the native `LLMEngine` (MLX /
     OpenAI / Anthropic / OpenRouter backends).
   - API keys are read **only** from the environment / `.env` — never
@@ -91,6 +92,50 @@ the canonical interfaces above.
   give the execution layer a deterministic confirmation gate.
 - High-risk tools (`execute_command`, desktop input, email, calendar) are
   annotated `high` + confirmation-required.
+
+#### 5-level RiskScorer (code-enforced, never model-decided)
+
+The **`RiskScorer`** (`fol/modules/tools/gate.py`) maps tool names + arguments
+to a 5-level risk score **deterministically at runtime** — the LLM can never
+bypass it.  `RiskLevel5` maps to `GateDecision` as follows:
+
+| Level | `RiskLevel5` | `GateDecision` | UI behavior |
+|---|---|---|---|
+| 1 | `SAFE_READ` | `OK` | No notification — execute silently |
+| 2 | `UI_NAVIGATION` | `OK` | No notification — execute silently |
+| 3 | `INTERACTIVE_GUI` | `PEEK_CONFIRM` | Lightweight auto-dismiss badge |
+| 4 | `FILE_MUTATION` | `CONFIRM` | A2UI confirmation card — blocked until user approves |
+| 5 | `SYSTEM_DANGEROUS` | `STRICT_CONFIRM` | Modal — exact signature + timeout |
+
+Unknown/unregistered tools → `REJECT` (fail-closed, never executed).
+
+**Tool → risk mapping (static):**
+
+| Risk Level | Tools |
+|---|---|
+| **1 — SAFE_READ** | `screenshot`, `browser_snapshot`, `browser_text`, `browser_get_url`, `safari_get_url`, `safari_get_text`, `system_info`, `clipboard_get`, `search_files`, `read_file`, `search_web`, `screen_size`, `list_events`, `list_profiles`, `get_daily_summary`, `get_contact_info`, `summarize_emails`, `read_emails`, `learn_from_web`, `get_current_context`, `render_*` (UI tools) |
+| **2 — UI_NAVIGATION** | `open_app`, `close_app`, `activate_app`, `browser_goto`, `browser_close`, `browser_refresh`, `safari_goto`, `scroll` |
+| **3 — INTERACTIVE_GUI** | `click`, `double_click`, `drag`, `move`, `type_text`, `hotkey`, `press_key`, `browser_click`, `browser_fill`, `browser_press`, `browser_type`, `clipboard_set` |
+| **4 — FILE_MUTATION** | `write_file`, `create_document`, `create_presentation`, `share_document`, `send_email`, `draft_email`, `reply_to_email`, `create_event`, `update_event`, `delete_event`, `send_telegram`, `send_whatsapp`, `save_to_obsidian`, `remember`, `log_daily_activity` |
+| **5 — SYSTEM_DANGEROUS** | `execute_command`, `sync_cookies` |
+
+**Dynamic scoring:** `fol_command` uses rule-based scoring — shell markers
+(`run`, `sudo`, `osascript`, `bash`, `python3`, `rm -rf`, etc.) → Level 5;
+non-shell commands → Level 4.  Unknown tools default to Level 3.
+
+**Confirmation flow:**
+
+```
+Tool call → ConfirmationGate.check(name, args)
+    │
+    ├── Unknown tool → REJECT
+    ├── Already approved signature → OK
+    └── RiskScorer.score(name, args)
+         ├── Level 1-2 → OK (execute immediately)
+         ├── Level 3 → PEEK_CONFIRM (notification, then execute)
+         ├── Level 4 → CONFIRM (blocked — A2UI card, user must approve)
+         └── Level 5 → STRICT_CONFIRM (blocked — modal, exact sig)
+```
 
 ---
 
@@ -148,9 +193,9 @@ Two live paths both implement this flow:
 |---|---|---|
 | `analyze/_llm.py`, `_llm_async.py` | LiteLLM model-chain used by `orchestrator/`, `obsidian/`, `src/` | **Legacy LLM adapter.** Superseded by `modules/llm/router.py` (`LiteLLMRouter`); kept intact — its ~100 tests still pass. Migration = point the orchestrator at `get_llm_router()`. |
 | `orchestrator/` tool dicts (`BROWSER_TOOLS`, `DESKTOP_TOOLS`, …) | Active tool catalog for the streaming agent | **Legacy tool registry.** Canonical replacement = `fol/modules/tools/` (`ToolSpec`). Kept for compatibility. |
-| `src/` (legacy Second Self web) | Old FastAPI + Next.js app | Preserved; do not build new features here. |
+| `src/` (legacy FOL web) | Old FastAPI + Next.js app | Preserved; do not build new features here. |
 | `agent-server/` | Desktop execution server (port 8421) | Active execution backend for the orchestrator. |
-| `bridge/`, `dashboard/`, `SecondSelf/` | Mobile bridge, monitoring, macOS app | Preserved; `SecondSelf/` must not be renamed in this phase. |
+| `bridge/`, `dashboard/`, `fol-app/` | Mobile bridge, monitoring, macOS app | Preserved; `fol-app/` is the macOS UI (renamed from `SecondSelf/` in 1.1.0). |
 | `utils/episodic_writer.py` | Standalone episodic writer | Preserved; migration target = `modules/memory/episodic_memory.py`/`interface.record_episode`. |
 
 Rules: do not delete legacy systems, do not depend on them from new code,
@@ -168,15 +213,75 @@ and mark legacy paths in new documentation.
 3. **Memory migration.** Move `RAGMemoryService` into the live app path and
    retire duplicate stores; wire `record_episode` into daily flows.
 4. **Brain optimization** (ROADMAP) — deferred by design.
-5. **`SecondSelf/` → FOL rename** — deferred by design.
+5. **`SecondSelf/` → `fol-app/` rename** — **done in 1.1.0**: directory renamed to `fol-app/`, Swift module/binary renamed to `FOL`.
+
+---
+
+## 6.5 Brain abstraction layer (additive — runtime unchanged)
+
+FOL now exposes ONE canonical reasoning contract — `BrainInterface`
+(`fol/modules/llm/brain.py`) — while the working backend stays exactly as it
+was. Nothing existing was replaced; the abstraction is a preparation layer.
+
+**Current architecture (working today):**
+
+    FOL
+     ↓
+    BrainInterface          (chat / chat_stream / acomplete / classify /
+     ↓                       plan / select_tools / summarize / verify)
+    CurrentLLMAdapter
+     ↓
+    LiteLLMRouter           (OpenRouter / OpenAI / Anthropic / … — cloud-only)
+     ↓
+    ToolRegistry → ConfirmationGate → Execution → ObsidianMemory
+
+**Runtime consumers sit on the ONE abstraction.** The orchestrator
+compatibility bridge (`orchestrator/llm_bridge.py`) keeps its legacy names
+(`llm_astream` / `llm_acompletion` / `llm_completion_sync`) and contracts
+(empty-on-failure, event dicts) but delegates every call to
+`get_brain("current")` — so `orchestrator/server.py`, `analyze/*`,
+`obsidian/*`, `src/synthesis/profile.py` are transitively on BrainInterface.
+`suggestion_engine.py` calls `get_brain("current").chat()` directly. The
+router is reached only through the adapter; there is one canonical internal
+abstraction, and the legacy `analyze/_llm*.py` adapter remains only as a
+resilience fallback when `fol/` is unavailable.
+
+**Future target (once Freebuff has a programmatic interface):**
+
+    FOL
+     ↓
+    BrainInterface
+     ↓
+    FreebuffBrainAdapter    (future supported backend)
+     ↓
+    ToolRegistry → ConfirmationGate → Execution → ObsidianMemory
+
+**Selection:** `FOL_BRAIN` env var (default `current`).
+
+- `FOL_BRAIN=current` → `CurrentLLMAdapter`, a thin delegate over the existing
+  canonical `LiteLLMRouter`. It duplicates no routing/fallback logic.
+- `FOL_BRAIN=freebuff` → **fails clearly** with
+  `BrainConfigurationError` — Freebuff is NOT a programmatic runtime backend
+  yet, and the factory never silently falls back to another brain.
+- Unknown value → `BrainConfigurationError`.
+
+**FREEBUFF IS NOT YET A PROGRAMMATIC RUNTIME BACKEND.**
+The audited CLI is an interactive TUI; there is no SDK, no local server, no
+public HTTP API, and no stdin/stdout contract. `FreebuffBrainAdapter` exists
+only as an honest placeholder: every method reports
+`"Freebuff programmatic interface unavailable"` and never touches
+`credentials.json`, undocumented auth tokens, or hidden CLI internals.
+
+Memory stays out of the brain contract: the brain reasons, the
+`MemoryService` (Obsidian) stores — secret scrubbing is preserved unchanged.
 
 ---
 
 ## 7. Testing
 
 ```bash
-cd fol && python3 -m pytest tests/ -q      # FOL core (810)
-python3 -m pytest tests/ -q                # root suite incl. legacy adapters (1168)
+cd fol && python3 -m pytest tests/ -q      # FOL core (1036)
+python3 -m pytest tests/ -q                # root suite incl. legacy adapters (1184+)
 bash scripts/verify_scenarios.sh           # live end-to-end scenarios
 ```
 

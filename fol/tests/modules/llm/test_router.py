@@ -27,6 +27,17 @@ from modules.llm.router import (
 )
 
 
+@pytest.fixture(autouse=True)
+def _enable_local_for_router_mechanics(monkeypatch):
+    """The pre-policy tests in this file exercise router fallback mechanics
+    with ``ollama/…`` models; explicitly re-enable local LLMs for them so the
+    mechanics stay covered. The policy itself (local models skipped by
+    default) is tested by the dedicated TestLocalModelPolicy tests, which
+    clear the flag."""
+    monkeypatch.setenv("FOL_ENABLE_LOCAL_LLM", "1")
+    yield
+
+
 # ===========================================================================
 # build_model_chain
 # ===========================================================================
@@ -40,20 +51,40 @@ class TestBuildModelChain:
     def test_fallbacks_in_order(self):
         chain = build_model_chain(
             primary="gpt-4o",
-            fallbacks="ollama/llama3.2:3b, claude-sonnet-4-20250514",
-            key_resolver=lambda m: "local" if m.startswith("ollama") else "sk",
+            fallbacks="openrouter/meta-llama/llama-3.3-70b-instruct, claude-sonnet-4-20250514",
+            key_resolver=lambda m: "sk",
         )
-        assert chain == ["gpt-4o", "ollama/llama3.2:3b", "claude-sonnet-4-20250514"]
+        assert chain == ["gpt-4o", "openrouter/meta-llama/llama-3.3-70b-instruct", "claude-sonnet-4-20250514"]
 
     def test_skips_models_without_key(self):
         chain = build_model_chain(
             primary="gpt-4o",
-            fallbacks="ollama/llama3.2:3b",
+            fallbacks="openrouter/meta-llama/llama-3.3-70b-instruct",
             key_resolver=lambda m: "sk" if m == "gpt-4o" else None,
         )
         assert chain == ["gpt-4o"]
 
-    def test_local_models_never_skipped(self):
+    def test_local_models_skipped_by_default(self, monkeypatch):
+        """POLICY: local LLMs are removed from FOL — skipped unless enabled."""
+        monkeypatch.delenv("FOL_ENABLE_LOCAL_LLM", raising=False)
+        chain = build_model_chain(
+            primary="ollama/llama3.2:3b",
+            fallbacks="",
+            key_resolver=lambda m: "local",
+        )
+        assert chain == []
+
+    def test_local_models_skipped_in_fallback_by_default(self, monkeypatch):
+        monkeypatch.delenv("FOL_ENABLE_LOCAL_LLM", raising=False)
+        chain = build_model_chain(
+            primary="gpt-4o",
+            fallbacks="ollama/llama3.2:3b",
+            key_resolver=lambda m: "local" if m.startswith("ollama") else "sk",
+        )
+        assert chain == ["gpt-4o"]
+
+    def test_local_models_included_when_explicitly_enabled(self, monkeypatch):
+        monkeypatch.setenv("FOL_ENABLE_LOCAL_LLM", "1")
         chain = build_model_chain(
             primary="ollama/llama3.2:3b",
             fallbacks="",

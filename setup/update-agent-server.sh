@@ -27,4 +27,4 @@ else
     echo "[update] WARNING: Agent-server not responding. Check: cat $SECOND_HOME/second-self/agent-server/agent.err"
 fi
 
-echo "[update] Done. Run 'cd SecondSelf && swift build && swift run' to launch the app."
+echo "[update] Done. Run 'cd fol-app && swift build && swift run' to launch the app."

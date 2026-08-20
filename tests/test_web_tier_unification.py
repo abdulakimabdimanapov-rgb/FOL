@@ -101,7 +101,7 @@ _TOOL_CASES = [
     ("share_document", {"file_id": "f", "email": "a@b.c"}, GateDecision.CONFIRM),
     ("browser_goto", {"url": "https://example.com"}, GateDecision.OK),
     ("search_web", {"query": "ai"}, GateDecision.OK),
-    ("draft_email", {"to": "a@b.c", "subject": "s", "body": "b"}, GateDecision.OK),
+    ("draft_email", {"to": "a@b.c", "subject": "s", "body": "b"}, GateDecision.CONFIRM),
     ("browser_snapshot", {}, GateDecision.OK),
 ]
 

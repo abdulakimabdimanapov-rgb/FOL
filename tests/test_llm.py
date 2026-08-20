@@ -11,6 +11,15 @@ import pytest
 import analyze._llm as llm
 
 
+@pytest.fixture(autouse=True)
+def _enable_local_for_legacy_fallback_tests(monkeypatch):
+    """These pre-policy tests exercise fallback mechanics with ollama models;
+    explicitly re-enable local LLMs so the mechanics stay covered (the policy
+    itself is enforced in fol/modules/llm/router.py and its tests)."""
+    monkeypatch.setenv("FOL_ENABLE_LOCAL_LLM", "1")
+    yield
+
+
 # ===========================================================================
 # _get_config
 # ===========================================================================

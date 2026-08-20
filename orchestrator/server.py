@@ -15,7 +15,7 @@ Layer 0: FastAPI with job state machine and SSE streaming.
 
 from __future__ import annotations
 
-from typing import Any, AsyncGenerator
+from typing import Any, AsyncGenerator, Optional
 
 import asyncio
 import json
@@ -64,6 +64,13 @@ from tool_registry import (
 )
 from memory_bridge import record_activity as memory_record_activity
 from memory_bridge import retrieve_context as memory_retrieve_context
+# Conversation history persistence (bridge to fol/modules/memory/conversation.py)
+try:
+    from fol.modules.memory.conversation import ConversationHistory
+except Exception:
+    # Best-effort import — keep orchestrator runnable if module path differs.
+    ConversationHistory = None
+from memory_bridge import retrieve_lessons as memory_retrieve_lessons
 from suggestion_engine import profile_trigger, pattern_trigger, ambient_tick
 
 # Agent Team system (Layer 9 — Multi-Agent Architecture)
@@ -99,8 +106,9 @@ from response_formatter import (
     sanitize_event_stream,
     strip_tool_call_json,
 )
+from followup import resolve_followup
 
-load_dotenv(os.path.join(os.path.dirname(__file__), "..", ".env"))
+load_dotenv(os.path.join(os.path.dirname(__file__), "..", ".env"), override=True)
 
 PORT = 8420
 FOL_API_URL = "http://localhost:8754"
@@ -283,9 +291,33 @@ def _select_tools_for_task(task: str, agent_type: AgentType) -> list:
 # Job state machine
 # ---------------------------------------------------------------------------
 
-VALID_STATES = ("idle", "thinking", "working", "complete", "error")
+VALID_STATES = ("idle", "thinking", "working", "complete", "error", "cancelled")
 
-job_lock = asyncio.Lock()
+class _LazyLock:
+    """asyncio.Lock that defers creation until first async use.
+
+    Python 3.9's asyncio.Lock() requires a running event loop at creation
+    time.  Creating it at module level crashes tests that import this module
+    outside an async context.  This wrapper delays construction until the
+    first ``async with`` entry, when an event loop is guaranteed.
+    """
+
+    def __init__(self) -> None:
+        self._lock: asyncio.Lock | None = None
+
+    def _ensure(self) -> asyncio.Lock:
+        if self._lock is None:
+            self._lock = asyncio.Lock()
+        return self._lock
+
+    async def __aenter__(self):  # type: ignore[no-untyped-def]
+        return await self._ensure().__aenter__()
+
+    async def __aexit__(self, *args: object) -> None:  # type: ignore[override]
+        await self._ensure().__aexit__(*args)
+
+
+job_lock = _LazyLock()
 current_job: dict = {
     "id": None,
     "state": "idle",
@@ -293,6 +325,8 @@ current_job: dict = {
     "actions": [],
     "started_at": None,
     "message_queue": [],
+    # Flag to request an interrupt/cancel of the running job
+    "interrupt_requested": False,
 }
 
 # ---------------------------------------------------------------------------
@@ -321,6 +355,26 @@ _user_name: str | None = None
 _chat_session_id: str = uuid.uuid4().hex
 _conversation_history: list = []
 MAX_HISTORY_MESSAGES = 40
+
+# Lazy ConversationHistory store (initialized on-demand)
+_conversation_store: ConversationHistory | None = None
+_conversation_store_initialized = False
+
+async def _ensure_conversation_store() -> None:
+    """Initialize the persistent ConversationHistory once (best-effort)."""
+    global _conversation_store, _conversation_store_initialized
+    if _conversation_store_initialized:
+        return
+    if ConversationHistory is None:
+        _conversation_store_initialized = True
+        return
+    try:
+        _conversation_store = ConversationHistory()
+        await _conversation_store.initialize()
+    except Exception as e:
+        print(f"[orchestrator] Warning: conversation store init failed: {e}")
+        _conversation_store = None
+    _conversation_store_initialized = True
 
 
 cached_profile: dict | None = None
@@ -397,7 +451,7 @@ def _get_agent_prompt_suffix(agent_type: AgentType) -> str | None:
 def _auto_route_agent(task: str) -> AgentType:
     """Auto-detect the best agent for a task. Updates global state."""
     global _current_agent_type
-    detected = route_task(task, list(_conversation_history))
+    detected = route_task(task, _get_recent_history_sync(40))
     _current_agent_type = detected
     print(f"[orchestrator] Agent -> {_AGENT_REGISTRY[detected]['name']} (routed from: {task[:60]}...)")
     return detected
@@ -433,11 +487,13 @@ async def set_job_state(state: str, task: str | None = None, message: str | None
         current_job["task"] = None
         current_job["actions"] = []
         current_job["started_at"] = None
+        current_job["interrupt_requested"] = False
     elif state == "thinking":
         current_job["id"] = str(uuid.uuid4())
         current_job["task"] = task
         current_job["actions"] = []
         current_job["started_at"] = time.time()
+        current_job["interrupt_requested"] = False
     print(f"[orchestrator] State -> {state}" + (f" ({message})" if message else ""))
 
 
@@ -658,6 +714,7 @@ async def execute_tool_call(tool_name: str, arguments: dict) -> str:
     Unknown tools fail closed (gate rejects them before dispatch).
     """
     # Deterministic confirmation gate (code decides, never the model).
+    # Uses 5-level RiskScorer: OK → PEEK → CONFIRM → STRICT → REJECT.
     gate = get_confirmation_gate()
     decision, action_id = gate.check(tool_name, arguments)
     if decision.value == "reject":
@@ -667,11 +724,28 @@ async def execute_tool_call(tool_name: str, arguments: dict) -> str:
             "status": "confirmation_required",
             "action_id": action_id,
             "tool": tool_name,
+            "risk_level": "file_mutation",
             "message": (
                 f"Action '{tool_name}' needs your approval before it runs. "
                 "Render a confirm action so the user can approve it."
             ),
         })
+    if decision.value == "strict":
+        return json.dumps({
+            "status": "confirmation_required",
+            "action_id": action_id,
+            "tool": tool_name,
+            "risk_level": "system_dangerous",
+            "strict": True,
+            "message": (
+                f"Action '{tool_name}' requires explicit confirmation. "
+                "This is a system-level operation. Render a confirm action."
+            ),
+        })
+    if decision.value == "peek":
+        # PEEK_CONFIRM: execute but emit an info ping (no blocking)
+        # The tool will execute; the UI gets a lightweight notification.
+        pass
 
     # Deterministic argument validation before dispatch.
     registry = get_orchestrator_registry()
@@ -808,6 +882,15 @@ _TOOLS_AND_RULES = (
     "  research — 1-2 good sources are enough for a summary.\n"
     "Complete the user's task step by step, then STOP and answer.\n"
     "\n"
+    "LESSONS FROM PAST TASKS (IMPORTANT):\n"
+    "- The context may contain 'Lessons from past tasks' — these are things\n"
+    "  learned from previous work sessions (e.g. 'Always use pytest -v',\n"
+    "  'User prefers dark mode').\n"
+    "- APPLY these lessons when relevant to the current task.\n"
+    "- Never repeat a mistake that was already recorded as a lesson.\n"
+    "- Lessons are auto-generated from completed tasks — follow them as\n"
+    "  established best practices for this user.\n"
+    "\n"
     "COMMUNICATION RULES (MANDATORY):\n"
     "- Never expose tool calls or JSON structures to the user.\n"
     "- Always communicate using natural language.\n"
@@ -867,11 +950,12 @@ def build_context_messages() -> list[dict[str, str]]:
     time_str = now.strftime("%H:%M UTC")
     weekday = now.strftime("%A")
     
+    recent_msgs = _get_recent_history_sync(40)
     parts = [
         f"Current context:",
         f"- Today is {weekday}, {today}",
         f"- Time: {time_str}",
-        f"- Messages in this conversation: {len(_conversation_history)}",
+        f"- Messages in this conversation: {len(recent_msgs)}",
     ]
     
     # Try to get active app context
@@ -881,6 +965,25 @@ def build_context_messages() -> list[dict[str, str]]:
         if snapshot.app_name:
             context_str = format_context_for_prompt(snapshot)
             parts.append(f"- Desktop: {context_str}")
+    except Exception:
+        pass
+    
+    # Inject relevant lessons from Memory Consolidation.
+    # Lessons are lessons learned from past tasks ("Always use pytest -v",
+    # "User prefers dark mode", etc.) that help avoid repeated mistakes.
+    try:
+        last_task = ""
+        for msg in reversed(recent_msgs):
+            if isinstance(msg, dict) and msg.get("role") == "user":
+                content = msg.get("content", "")
+                if isinstance(content, str) and content.strip():
+                    last_task = content.strip()
+                    break
+        if last_task:
+            lessons = memory_retrieve_lessons(last_task, limit=5)
+            if lessons:
+                lessons_text = "; ".join(lessons)
+                parts.append(f"- Lessons from past tasks: {lessons_text}")
     except Exception:
         pass
     
@@ -1036,7 +1139,7 @@ async def run_agent_loop(task: str, max_steps: int = 15) -> list:
     """
     actions: list = []
     _append_to_history("user", task)
-    messages: list = list(_conversation_history)
+    messages: list = list(_get_recent_history_sync(MAX_HISTORY_MESSAGES))
     
     # Inject context at the START so model ALWAYS knows context
     context_msgs = build_context_messages()
@@ -1106,7 +1209,7 @@ async def run_agent_loop(task: str, max_steps: int = 15) -> list:
             actions.append({
                 "step": step + 1,
                 "type": "complete",
-                "message": format_final_response(text_content, executed_tools, language),
+                "message": format_final_response(text_content, executed_tools, language, user_input=task),
             })
             try:
                 await asyncio.to_thread(_log_episodic_event, task)
@@ -1176,7 +1279,136 @@ RENDER_TYPE_MAP = {
     "render_profile_card": "ProfileCard",
     "render_screenshot": "Screenshot",
     "render_confirm_action": "ConfirmAction",
+    "render_action_info": "ActionInfo",
 }
+
+# File operations that trigger ActionInfo A2UI components
+_FILE_OP_TOOLS = {"read_file", "write_file"}
+_PRODUCTIVITY_FILE_TOOLS = {"create_document", "create_presentation"}
+
+# ---------------------------------------------------------------------------
+# Risk Scoring A2UI — generates components for risk levels 3-5
+# ---------------------------------------------------------------------------
+
+def build_risk_a2ui(tool_name: str, args: dict, decision, action_id: str | None) -> dict | None:
+    """Generate an A2UI component for a gated tool call based on risk level.
+
+    Returns an A2UI payload dict, or None when no A2UI is needed.
+
+    Level 3 (PEEK): PeekNotification — lightweight auto-dismiss badge
+    Level 4 (CONFIRM): RiskConfirm — animated card with Allow/Deny
+    Level 5 (STRICT): StrictModal — modal with countdown + emphasis
+    """
+    from modules.tools.gate import RiskLevel5, RiskScorer
+    
+    level = RiskScorer.score(tool_name, args)
+    component_id = f"comp-risk-{uuid.uuid4().hex[:8]}"
+    
+    # Build action description from tool name + args
+    action_desc = _build_action_description(tool_name, args)
+    
+    if level == RiskLevel5.INTERACTIVE_GUI:  # Level 3: PEEK_CONFIRM
+        return {
+            "version": "0.8",
+            "components": [{
+                "id": component_id,
+                "type": "PeekNotification",
+                "properties": {
+                    "toolName": tool_name,
+                    "action": action_desc,
+                },
+                "parentId": None,
+                "actions": None,
+            }],
+        }
+    
+    if level == RiskLevel5.FILE_MUTATION:  # Level 4: CONFIRM
+        # Determine risk sub-level for visual emphasis
+        risk_level_str = "file_mutation"
+        if tool_name in ("send_email", "draft_email", "reply_to_email",
+                         "send_telegram", "send_whatsapp"):
+            risk_level_str = "data_send"
+        elif tool_name in ("create_event", "update_event", "delete_event"):
+            risk_level_str = "event_mutation"
+        elif tool_name in ("save_to_obsidian", "remember", "log_daily_activity"):
+            risk_level_str = "memory_write"
+        
+        return {
+            "version": "0.8",
+            "components": [{
+                "id": component_id,
+                "type": "RiskConfirm",
+                "properties": {
+                    "actionId": action_id or component_id,
+                    "toolName": tool_name,
+                    "action": action_desc,
+                    "riskLevel": risk_level_str,
+                },
+                "parentId": None,
+                "actions": [
+                    {"id": "allow", "label": "Allow", "type": "allow"},
+                    {"id": "deny", "label": "Deny", "type": "deny"},
+                ],
+            }],
+        }
+    
+    if level == RiskLevel5.SYSTEM_DANGEROUS:  # Level 5: STRICT_CONFIRM
+        command = str(args.get("command", "")) if isinstance(args, dict) else ""
+        return {
+            "version": "0.8",
+            "components": [{
+                "id": component_id,
+                "type": "StrictModal",
+                "properties": {
+                    "actionId": action_id or component_id,
+                    "toolName": tool_name,
+                    "command": command[:500],  # cap for safety
+                },
+                "parentId": None,
+                "actions": [
+                    {"id": "allow", "label": "Execute", "type": "allow"},
+                    {"id": "deny", "label": "Cancel", "type": "deny"},
+                ],
+            }],
+        }
+    
+    return None  # Level 1-2: no A2UI needed
+
+
+def _build_action_description(tool_name: str, args: dict) -> str:
+    """Build a human-readable description of a tool action."""
+    if tool_name == "write_file":
+        path = args.get("path", "")
+        return f"Write to {Path(path).name if path else 'file'}"
+    if tool_name == "read_file":
+        path = args.get("path", "")
+        return f"Read {Path(path).name if path else 'file'}"
+    if tool_name == "send_email":
+        to = args.get("to", "")
+        subject = args.get("subject", "")
+        return f"Send email to {to}{f' — {subject}' if subject else ''}"
+    if tool_name == "create_event":
+        title = args.get("title", "")
+        return f"Create event: {title or 'Untitled'}"
+    if tool_name == "click":
+        x, y = args.get("x", 0), args.get("y", 0)
+        return f"Click at ({x}, {y})"
+    if tool_name == "type_text":
+        text = args.get("text", "")
+        return f"Type: {text[:50]}{'...' if len(text) > 50 else ''}"
+    if tool_name == "hotkey":
+        keys = args.get("keys", [])
+        return f"Hotkey: {' + '.join(keys)}"
+    if tool_name in ("fol_command", "execute_command"):
+        cmd = args.get("command", "")
+        return f"Execute: {cmd[:80]}{'...' if len(cmd) > 80 else ''}"
+    if tool_name == "open_app":
+        return f"Open: {args.get('name', 'app')}"
+    if tool_name == "browser_goto":
+        url = args.get("url", "")
+        return f"Navigate: {url[:60]}{'...' if len(url) > 60 else ''}"
+    # Generic fallback
+    return tool_name.replace("_", " ").title()
 
 
 def convert_to_a2ui(tool_name: str, args: dict) -> dict:
@@ -1245,6 +1477,55 @@ def convert_to_a2ui(tool_name: str, args: dict) -> dict:
     }
 
 
+def build_action_info_a2ui(tool_name: str, args: dict, result: dict) -> dict | None:
+    """Generate an ActionInfo A2UI component for file operations.
+
+    Returns an A2UI payload dict, or None when the tool is not a file operation
+    or the result does not contain useful file metadata.
+    """
+    component_id = f"comp-{uuid.uuid4().hex[:8]}"
+    file_path = args.get("path", "") or args.get("title", "")
+    if not file_path:
+        return None
+
+    # Determine file type hint from extension
+    ext = Path(file_path).suffix.lower() if "/" in file_path or "\\" in file_path or "." in file_path else ""
+
+    # Build caption from result
+    caption = ""
+    if tool_name == "read_file":
+        content = result.get("result", "") or result.get("content", "")
+        if isinstance(content, str) and content:
+            line_count = len(content.splitlines())
+            byte_count = len(content.encode("utf-8"))
+            caption = f"{line_count} lines, {byte_count} bytes"
+    elif tool_name == "write_file":
+        output = result.get("result", "") or result.get("output", "")
+        if isinstance(output, str):
+            caption = output[:120]
+    elif tool_name in ("create_document", "create_presentation"):
+        output = result.get("result", "") or result.get("output", "")
+        if isinstance(output, str):
+            caption = output[:120]
+
+    return {
+        "version": "0.8",
+        "components": [
+            {
+                "id": component_id,
+                "type": "ActionInfo",
+                "properties": {
+                    "fileName": Path(file_path).name if file_path else "document",
+                    "fileSize": caption or None,
+                    "caption": f"{tool_name.replace('_', ' ')}" if not caption else None,
+                },
+                "parentId": None,
+                "actions": None,
+            }
+        ],
+    }
+
+
 # ---------------------------------------------------------------------------
 # Conversation history helpers
 # ---------------------------------------------------------------------------
@@ -1300,6 +1581,88 @@ def _append_to_history(role: str, content: str | list[dict[str, Any]]) -> None:
             append_message(_user_uid, _chat_session_id, role, _strip_screenshots(content))
         except Exception as e:
             print(f"[orchestrator] Failed to save message to Firestore: {e}")
+    # Also persist to the local ConversationHistory store asynchronously
+    try:
+        async def _persist():
+            await _ensure_conversation_store()
+            if _conversation_store is None:
+                return
+            # Convert content to strings for the persistent turn record
+            if isinstance(content, str):
+                user_input = content if role == "user" else ""
+                assistant_response = content if role == "assistant" else ""
+            else:
+                try:
+                    serialized = json.dumps(content, default=str)
+                except Exception:
+                    serialized = str(content)
+                if role == "user":
+                    user_input = serialized
+                    assistant_response = ""
+                else:
+                    user_input = ""
+                    assistant_response = serialized
+            try:
+                await _conversation_store.add_turn(user_input=user_input, assistant_response=assistant_response, metadata={"source": "orchestrator"})
+            except Exception as e:
+                print(f"[orchestrator] Conversation store add_turn failed: {e}")
+
+        asyncio.create_task(_persist())
+    except Exception as e:
+        print(f"[orchestrator] Failed to schedule conversation persistence: {e}")
+
+
+def _flatten_store_turns_to_messages(turns: list) -> list[dict[str, Any]]:
+    """Convert ConversationHistory turns into the legacy list-of-messages format.
+
+    Each ConversationTurn may contain both `user_input` and `assistant_response`.
+    We expand each turn into one or two messages with `role`/`content` keys so
+    existing code that expects the `_conversation_history` shape continues to work.
+    """
+    msgs: list[dict[str, Any]] = []
+    for t in turns:
+        try:
+            ui = getattr(t, "user_input", "") or ""
+            ar = getattr(t, "assistant_response", "") or ""
+            if ui:
+                msgs.append({"role": "user", "content": ui})
+            if ar:
+                msgs.append({"role": "assistant", "content": ar})
+        except Exception:
+            # Fallback: if turn is already a dict-like
+            if isinstance(t, dict):
+                if t.get("user_input"):
+                    msgs.append({"role": "user", "content": t.get("user_input")})
+                if t.get("assistant_response"):
+                    msgs.append({"role": "assistant", "content": t.get("assistant_response")})
+    return msgs
+
+
+def _get_recent_history_sync(n: int = MAX_HISTORY_MESSAGES) -> list[dict[str, Any]]:
+    """Return up to `n` recent messages in the legacy `{role,content}` shape.
+
+    Prefer the live in-memory `_conversation_history` — it is always current
+    (the persistent store is flushed asynchronously, so it can lag the very
+    message being processed). Falls back to the persistent `_conversation_store`
+    when the process just restarted and memory is empty. This function is
+    synchronous so existing sync callsites (tests and helper code) can use it
+    safely.
+    """
+    # Live in-memory history is the source of truth during a session.
+    try:
+        if _conversation_history:
+            return list(_conversation_history[-n:])
+    except Exception:
+        pass
+    # After a restart: restore from the persistent store.
+    if _conversation_store is not None:
+        try:
+            turns = getattr(_conversation_store, "_turns", [])
+            if turns:
+                return _flatten_store_turns_to_messages(turns[-n:])
+        except Exception:
+            pass
+    return []
 
 
 def _load_history_from_firestore() -> None:
@@ -1363,9 +1726,10 @@ def _get_context_summary() -> str:
     parts = []
     
     # 1. What we've talked about
+    recent_msgs = _get_recent_history_sync(40)
     user_messages = [
-        m["content"] for m in _conversation_history 
-        if m.get("role") == "user" 
+        m["content"] for m in recent_msgs
+        if m.get("role") == "user"
         and (isinstance(m.get("content"), str))
     ]
     if user_messages:
@@ -1418,7 +1782,7 @@ async def run_agent_loop_streaming(task: str, max_steps: int = 15, source: str =
     yield ("state", {"state": "thinking"})
 
     _append_to_history("user", task)
-    messages: list = list(_conversation_history)
+    messages: list = list(_get_recent_history_sync(MAX_HISTORY_MESSAGES))
     
     # Inject context at the START so model ALWAYS knows context
     context_msgs = build_context_messages()
@@ -1454,6 +1818,15 @@ async def run_agent_loop_streaming(task: str, max_steps: int = 15, source: str =
         stop_reason = None
         text_content = ""
         tool_calls = []
+
+        # Check for interrupt request before starting each step
+        if current_job.get("interrupt_requested"):
+            msg = ("Операция была прервана." if language == "ru" else "Operation interrupted.")
+            yield ("token", {"text": msg})
+            yield ("state", {"state": "cancelled", "message": msg})
+            async with job_lock:
+                current_job["state"] = "cancelled"
+            return
 
         async for event_type, event_data in call_claude_streaming(messages, system_prompt, tools=agent_tools):
             if event_type == "token":
@@ -1491,7 +1864,7 @@ async def run_agent_loop_streaming(task: str, max_steps: int = 15, source: str =
         # model still emitted as text can never reach the user, and so the
         # response is always a clean non-empty string.
         if stop_reason == "end_turn" or not tool_calls:
-            final_text = format_final_response(text_content, executed_tools, language)
+            final_text = format_final_response(text_content, executed_tools, language, user_input=task)
             for chunk in _chunk_final_text(final_text):
                 yield ("token", {"text": chunk})
             yield ("state", {"state": "complete", "message": final_text})
@@ -1563,6 +1936,16 @@ async def run_agent_loop_streaming(task: str, max_steps: int = 15, source: str =
                 yield ("component", {"a2ui": a2ui_payload})
                 result_str = json.dumps({"status": "rendered", "awaiting_user_action": True})
             else:
+                # Risk Scoring A2UI: check gate BEFORE execution and emit
+                # the appropriate A2UI component (Level 3-5).
+                gate = get_confirmation_gate()
+                decision, action_id = gate.check(fn_name, fn_args)
+                
+                # Emit Risk A2UI component for Level 3-5
+                risk_a2ui = build_risk_a2ui(fn_name, fn_args, decision, action_id)
+                if risk_a2ui is not None:
+                    yield ("component", {"a2ui": risk_a2ui})
+                
                 # Phase 5 — single dispatch path: gate → validate → registry
                 # handler. The ConfirmationGate runs inside execute_tool_call,
                 # so every tool (including sync_cookies) is code-enforced.
@@ -1576,6 +1959,14 @@ async def run_agent_loop_streaming(task: str, max_steps: int = 15, source: str =
                 action_result = json.loads(result_str)
             except (json.JSONDecodeError, TypeError):
                 action_result = {"result": result_str}
+
+            # Emit ActionInfo A2UI component for file operations —
+            # gives the user a visual preview of what was read/written/created.
+            if fn_name in _FILE_OP_TOOLS or fn_name in _PRODUCTIVITY_FILE_TOOLS:
+                a2ui_info = build_action_info_a2ui(fn_name, fn_args, action_result)
+                if a2ui_info is not None:
+                    yield ("component", {"a2ui": a2ui_info})
+
             async with job_lock:
                 current_job["actions"].append({
                     "step": step + 1, "type": "tool_call",
@@ -1667,7 +2058,7 @@ async def _check_pattern_suggestions() -> None:
     try:
         # Snapshot to avoid race with /reset clearing the list mid-iteration
         suggestions = await asyncio.to_thread(
-            pattern_trigger, list(_conversation_history), cached_profile
+            pattern_trigger, _get_recent_history_sync(40), cached_profile
         )
         for suggestion in suggestions:
             await broadcast_event("suggestion", suggestion)
@@ -1698,7 +2089,7 @@ async def _ambient_loop() -> None:
                 continue
             # Snapshot to avoid race with /reset clearing the list mid-iteration
             suggestions = await asyncio.to_thread(
-                ambient_tick, list(_conversation_history), cached_profile
+                ambient_tick, _get_recent_history_sync(40), cached_profile
             )
             for suggestion in suggestions:
                 await broadcast_event("suggestion", suggestion)
@@ -1817,6 +2208,15 @@ async def lifespan(application: FastAPI):
             )
     except Exception as obs_err:
         print(f"[orchestrator] Obsidian init skipped: {obs_err}")
+
+    # Load the persistent conversation store at startup so follow-up context
+    # survives orchestrator restarts (the store is backed by ~/.fol/conversation_history.jsonl).
+    try:
+        await _ensure_conversation_store()
+        if _conversation_store is not None:
+            print(f"[orchestrator] Conversation history loaded ({_conversation_store.turn_count} turns)")
+    except Exception as conv_err:
+        print(f"[orchestrator] Conversation history init failed: {conv_err}")
 
     ambient_loop_task = asyncio.create_task(_ambient_loop())
     print("[orchestrator] Ambient suggestion loop started (30s interval)")
@@ -2306,6 +2706,15 @@ async def chat(request: Request):
     # never approve its own actions.
     _resolve_user_confirmation(message)
 
+    # Follow-up resolution: conservative rewrite for pronoun-based queries.
+    try:
+        rewritten, changed = resolve_followup(message, _get_recent_history_sync(40))
+        if changed:
+            print(f"[orchestrator] Follow-up rewritten: '{message[:80]}' -> '{rewritten[:120]}'")
+            message = rewritten
+    except Exception as e:
+        print(f"[orchestrator] Follow-up resolution failed: {e}")
+
     # If we're busy, queue the message
     async with job_lock:
         if current_job["state"] not in ("idle", "complete", "error"):
@@ -2367,6 +2776,21 @@ async def chat(request: Request):
     )
 
 
+@app.post("/chat/interrupt")
+async def chat_interrupt(request: Request):
+    """Request the server to interrupt the currently running job.
+
+    Body optional: {"reason": "..."}
+    Returns current job id and acknowledgment.
+    """
+    async with job_lock:
+        if current_job["state"] in ("idle", "complete", "error"):
+            return JSONResponse(content={"status": "no_active_job"})
+        current_job["interrupt_requested"] = True
+        current_job["state"] = "cancelled"
+        return JSONResponse(content={"status": "interrupt_requested", "job_id": current_job.get("id")})
+
+
 # ---------------------------------------------------------------------------
 # Persistent SSE — GET /events (suggestion push channel)
 # ---------------------------------------------------------------------------
@@ -2400,6 +2824,55 @@ async def events(request: Request):
     )
 
 
+@app.get("/chat/replay")
+async def chat_replay(since_ts: Optional[float] = None, last_n: int = 20):
+    """Replay recent conversation turns for clients that missed SSE events.
+
+    Query params:
+      - since_ts: unix timestamp; if provided, return turns newer than this
+      - last_n: return at most this many most recent turns (default 20)
+    """
+    # Prefer the persistent conversation store when available
+    await _ensure_conversation_store()
+    turns = []
+    if _conversation_store is not None:
+        try:
+            recent = await _conversation_store.get_recent(n=last_n)
+            for t in recent:
+                turns.append(t.to_dict())
+        except Exception as e:
+            print(f"[orchestrator] chat_replay: conversation store read failed: {e}")
+
+    # Fallback to in-memory history
+    if not turns:
+        selected = _conversation_history[-last_n:]
+        for m in selected:
+            turns.append({"role": m.get("role"), "content": m.get("content")})
+
+    # If since_ts provided, filter
+    if since_ts is not None:
+        try:
+            ts = float(since_ts)
+            filtered = []
+            for t in turns:
+                # try to pick timestamp fields if available
+                t_ts = None
+                if "timestamp" in t:
+                    t_ts = float(t.get("timestamp") or 0)
+                elif isinstance(t.get("content"), dict) and "timestamp" in t.get("content"):
+                    try:
+                        t_ts = float(t["content"]["timestamp"])
+                    except Exception:
+                        t_ts = None
+                if t_ts is None or t_ts > ts:
+                    filtered.append(t)
+            turns = filtered
+        except Exception:
+            pass
+
+    return JSONResponse(content={"turns": turns})
+
+
 # ---------------------------------------------------------------------------
 # Suggestion response — accept/dismiss/modify
 # ---------------------------------------------------------------------------
@@ -2422,7 +2895,7 @@ async def suggestion_respond(request: Request):
         "action": action,
         "modification": body.get("modification") if action == "modify" else None,
         "profile_name": cached_profile.get("name", "") if cached_profile else "",
-        "conversation_length": len(_conversation_history),
+        "conversation_length": len(_get_recent_history_sync(200)),
     }
     try:
         rewards_path.parent.mkdir(parents=True, exist_ok=True)
@@ -2499,6 +2972,16 @@ async def reset():
         current_job["started_at"] = None
         current_job["message_queue"] = []
     _conversation_history = []
+    # Also clear the persistent conversation store if available
+    try:
+        await _ensure_conversation_store()
+        if _conversation_store is not None:
+            try:
+                await _conversation_store.clear()
+            except Exception as e:
+                print(f"[orchestrator] Warning: failed to clear conversation store: {e}")
+    except Exception:
+        pass
     _chat_session_id = uuid.uuid4().hex
     cached_profile = None
     _cookie_state.reset()

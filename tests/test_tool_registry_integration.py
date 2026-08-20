@@ -84,8 +84,16 @@ def test_execute_tool_call_gates_sync_cookies():
 
 
 def test_execute_tool_call_gates_type_text():
-    result = json.loads(_run_execute_tool_call("type_text", {"text": "hello"}))
-    assert result.get("status") == "confirmation_required"
+    """type_text is INTERACTIVE_GUI → PEEK_CONFIRM (light notification, no block).
+
+    In the 5-level RiskScorer, interactive GUI tools (click, type, hotkey)
+    get PEEK_CONFIRM instead of CONFIRM — they execute with a lightweight
+    auto-dismiss notification.  Verify the gate decision directly since
+    PEEK_CONFIRM falls through to execution (needs agent server).
+    """
+    gate = get_confirmation_gate()
+    decision, _ = gate.check("type_text", {"text": "hello"})
+    assert decision.value == "peek"
 
 
 def test_execute_tool_call_unknown_rejected():

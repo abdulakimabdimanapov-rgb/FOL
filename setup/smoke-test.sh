@@ -47,7 +47,7 @@ ORCH_HEALTH=$(curl -s --connect-timeout 3 http://localhost:8420/health 2>/dev/nu
 if echo "$ORCH_HEALTH" | grep -q '"status"'; then
     check "Responding" "pass"
 else
-    check "Not responding (start SecondSelf app or run orchestrator manually)" "fail"
+    check "Not responding (start FOL app or run orchestrator manually)" "fail"
 fi
 echo ""
 

@@ -18,6 +18,11 @@ trees — and because of that, **the project did not run at all**: imports faile
 **The main work of this session was making the project actually work, then
 proving it.**
 
+
+
+
+
+
 ## ToolRegistry
 
 A single canonical registry for all 50 tools now lives in

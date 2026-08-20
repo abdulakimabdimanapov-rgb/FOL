@@ -32,7 +32,7 @@ jobs:
 
       - name: Build Swift binary (release)
         run: |
-          cd SecondSelf
+          cd fol-app
           swift build -c release
 
       - name: Import signing certificates
@@ -126,3 +126,7 @@ jobs:
       - name: Cleanup keychain
         if: always()
         run: security delete-keychain $RUNNER_TEMP/signing.keychain-db 2>/dev/null || true
+
+
+
+

@@ -4,7 +4,7 @@ This creates a borderless, always-on-top transparent window that hosts
 the FOL web UI, similar to the macOS Notch UI.
 
 Usage:
-    # From SecondSelf/ directory:
+    # From fol-app/ directory:
     python fol/fol_mac_app.py
 """
 

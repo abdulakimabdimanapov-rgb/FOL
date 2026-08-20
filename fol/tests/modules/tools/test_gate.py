@@ -33,30 +33,31 @@ def _make_gate(*specs: ToolSpec) -> ConfirmationGate:
 
 
 def test_low_risk_no_confirmation():
-    gate = _make_gate(_spec("read", risk="low"))
-    decision, action_id = gate.check("read", {})
+    gate = _make_gate(_spec("read_file", risk="low"))
+    decision, action_id = gate.check("read_file", {})
     assert decision == GateDecision.OK
     assert action_id is None
 
 
 def test_high_risk_requires_confirmation():
-    gate = _make_gate(_spec("send", risk="high"))
-    decision, action_id = gate.check("send", {})
+    gate = _make_gate(_spec("send_email", risk="high"))
+    decision, action_id = gate.check("send_email", {})
     assert decision == GateDecision.CONFIRM
     assert action_id is not None
     assert action_id.startswith("act_")
 
 
-def test_confirm_flag_forces_confirmation_even_at_medium():
-    gate = _make_gate(_spec("sync", risk="medium", confirm=True))
-    decision, _ = gate.check("sync", {})
+def test_file_mutation_always_requires_confirmation():
+    """File-mutation tools always get CONFIRM regardless of ToolSpec metadata."""
+    gate = _make_gate(_spec("send_email", risk="medium"))
+    decision, _ = gate.check("send_email", {})
     assert decision == GateDecision.CONFIRM
 
 
 def test_critical_risk_confirmation():
-    gate = _make_gate(_spec("delete", risk="critical"))
-    decision, _ = gate.check("delete", {})
-    assert decision == GateDecision.CONFIRM
+    gate = _make_gate(_spec("execute_command", risk="critical"))
+    decision, _ = gate.check("execute_command", {})
+    assert decision == GateDecision.STRICT_CONFIRM
 
 
 def test_unknown_tool_fails_closed():
@@ -67,25 +68,25 @@ def test_unknown_tool_fails_closed():
 
 def test_approval_binds_to_signature():
     """Approve one signature; a different args signature stays blocked."""
-    gate = _make_gate(_spec("send", risk="high"))
-    decision, action_id = gate.check("send", {"to": "a@x.com"})
+    gate = _make_gate(_spec("send_email", risk="high"))
+    decision, action_id = gate.check("send_email", {"to": "a@x.com"})
     assert decision == GateDecision.CONFIRM
     assert gate.approve(action_id)
 
     # Same signature → OK
-    decision, _ = gate.check("send", {"to": "a@x.com"})
+    decision, _ = gate.check("send_email", {"to": "a@x.com"})
     assert decision == GateDecision.OK
     # Different signature → still blocked (cannot bypass by re-issuing)
-    decision, _ = gate.check("send", {"to": "b@x.com"})
+    decision, _ = gate.check("send_email", {"to": "b@x.com"})
     assert decision == GateDecision.CONFIRM
 
 
 def test_deny_removes_pending():
-    gate = _make_gate(_spec("send", risk="high"))
-    _, action_id = gate.check("send", {})
+    gate = _make_gate(_spec("send_email", risk="high"))
+    _, action_id = gate.check("send_email", {})
     assert gate.deny(action_id)
     # After denial the call is gated again (must ask again)
-    decision, _ = gate.check("send", {})
+    decision, _ = gate.check("send_email", {})
     assert decision == GateDecision.CONFIRM
 
 
@@ -96,20 +97,20 @@ def test_approve_unknown_id_fails():
 
 
 def test_approve_all_pending():
-    gate = _make_gate(_spec("send", risk="high"), _spec("type", risk="high"))
-    _, id1 = gate.check("send", {})
-    _, id2 = gate.check("type", {})
+    gate = _make_gate(_spec("send_email", risk="high"), _spec("write_file", risk="high"))
+    _, id1 = gate.check("send_email", {})
+    _, id2 = gate.check("write_file", {})
     assert gate.approve_all_pending() == 2
-    assert gate.check("send", {})[0] == GateDecision.OK
-    assert gate.check("type", {})[0] == GateDecision.OK
+    assert gate.check("send_email", {})[0] == GateDecision.OK
+    assert gate.check("write_file", {})[0] == GateDecision.OK
 
 
 def test_deny_all_pending():
-    gate = _make_gate(_spec("send", risk="high"), _spec("type", risk="high"))
-    gate.check("send", {})
-    gate.check("type", {})
+    gate = _make_gate(_spec("send_email", risk="high"), _spec("write_file", risk="high"))
+    gate.check("send_email", {})
+    gate.check("write_file", {})
     assert gate.deny_all_pending() == 2
-    assert gate.check("send", {})[0] == GateDecision.CONFIRM
+    assert gate.check("send_email", {})[0] == GateDecision.CONFIRM
 
 
 def test_reset_clears_state():
@@ -122,17 +123,17 @@ def test_reset_clears_state():
 
 
 def test_rule_shell_markers_block_fol_command():
-    """fol_command with shell-like content requires confirmation even at medium."""
+    """fol_command with shell-like content requires strict confirmation."""
     gate = _make_gate(_spec("fol_command", risk="medium"))
     for cmd in ["run ls -la", "выполни команду", "osascript -e 'x'", "sudo rm -rf /", "python3 -c x"]:
         decision, _ = gate.check("fol_command", {"command": cmd})
-        assert decision == GateDecision.CONFIRM, f"expected CONFIRM for {cmd!r}"
+        assert decision == GateDecision.STRICT_CONFIRM, f"expected STRICT_CONFIRM for {cmd!r}"
 
 
 def test_rule_benign_fol_command_passes():
     gate = _make_gate(_spec("fol_command", risk="medium"))
     decision, _ = gate.check("fol_command", {"command": "screenshot"})
-    assert decision == GateDecision.OK
+    assert decision == GateDecision.CONFIRM
 
 
 def test_classify_user_decision_approve():
@@ -156,6 +157,8 @@ def test_classify_user_decision_neutral():
 def test_needs_confirmation_unknown_is_false():
     gate = _make_gate(_spec("x", risk="low"))
     assert gate.needs_confirmation("nope", {}) is False
+    # Also: low-risk safe-read tools should not need confirmation
+    assert gate.needs_confirmation("read_file", {}) is False
 
 
 def test_signature_is_json_normalized():

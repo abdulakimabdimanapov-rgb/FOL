@@ -184,7 +184,7 @@ if [ "$SAFARI_WORKS" = "y" ]; then
     echo "  Agent Server: running on :8421"
     echo "  Remote ctrl:  verified"
     echo ""
-    echo "  Next: Start the orchestrator (or launch SecondSelf app)"
+    echo "  Next: Start the orchestrator (or launch FOL app)"
     echo "  export ANTHROPIC_API_KEY=your_key"
     echo "  export TAVILY_API_KEY=your_key"
     echo "  python3 orchestrator/server.py"

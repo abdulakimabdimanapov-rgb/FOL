@@ -218,4 +218,31 @@ def record_activity(
         return False
 
 
-__all__ = ["retrieve_context", "record_episode", "record_activity", "_scrub", "_is_secret_like"]
+def retrieve_lessons(task: str = "", *, limit: int = 5) -> list[str]:
+    """Retrieve relevant lessons from Brain/Lessons.md via FOL API.
+
+    If ``task`` is provided, returns only lessons relevant to that task
+    (keyword-overlap ranking).  Falls back to recent lessons when the
+    FOL API is unreachable.
+    """
+    try:
+        result = _post("/api/memory/lessons", {"limit": limit + 10})
+        lessons = result.get("lessons") or []
+        if not lessons or not task:
+            return lessons[:limit]
+        # Simple keyword-overlap ranking for relevance
+        task_words = set(task.lower().split())
+        scored = []
+        for lesson in lessons:
+            l_words = set(lesson.lower().split())
+            overlap = len(task_words & l_words)
+            scored.append((overlap, lesson))
+        scored.sort(key=lambda x: -x[0])
+        # Return only lessons with at least one overlapping word
+        return [lesson for _, lesson in scored[:limit] if scored[0][0] > 0]
+    except Exception as exc:  # pragma: no cover - defensive
+        logger.debug("retrieve_lessons failed: %s", exc)
+        return []
+
+
+__all__ = ["retrieve_context", "record_episode", "record_activity", "retrieve_lessons", "_scrub", "_is_secret_like"]

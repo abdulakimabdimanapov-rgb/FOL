@@ -24,8 +24,8 @@ Status key: ✅ done / ⬜ not done / 🚫 blocked
 - [x] Root tests: 1168 passed / 4 skipped
 - [x] FOL core tests: 810 passed
 - [x] Orchestrator-local tests: 71 passed
-- [x] macOS app builds: `cd SecondSelf && swift build`
-- [x] Distributable artifact: `./build-app.sh` → `build/Second Self.app` (ad-hoc signed)
+- [x] macOS app builds: `cd fol-app && swift build`
+- [x] Distributable artifact: `./build-app.sh` → `build/FOL.app` (ad-hoc signed)
 
 ## Security
 

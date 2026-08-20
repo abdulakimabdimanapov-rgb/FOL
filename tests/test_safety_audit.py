@@ -97,14 +97,24 @@ def test_non_dict_arguments_rejected(registry):
     ("send_email", {"to": "a@b.c", "subject": "s", "body": "b"}),
     ("reply_to_email", {"message_id": "m", "thread_id": "t", "body": "b"}),
     ("share_document", {"file_id": "f", "email": "a@b.c"}),
+])
+def test_file_mutation_tools_require_confirmation(gate, tool, args):
+    """File-mutation tools (level 4) → CONFIRM (blocked until user approval)."""
+    decision, action_id = gate.check(tool, args)
+    assert decision == GateDecision.CONFIRM
+    assert action_id is not None
+
+
+@pytest.mark.parametrize("tool,args", [
     ("type_text", {"text": "hello"}),
     ("hotkey", {"keys": ["command", "q"]}),
     ("click", {"x": 10, "y": 10}),
     ("safari_js", {"javascript": "alert(1)"}),
 ])
-def test_high_risk_tools_require_confirmation(gate, tool, args):
+def test_interactive_gui_tools_peek_confirm(gate, tool, args):
+    """Interactive GUI tools (level 3) → PEEK_CONFIRM (light notification)."""
     decision, action_id = gate.check(tool, args)
-    assert decision == GateDecision.CONFIRM
+    assert decision == GateDecision.PEEK_CONFIRM
     assert action_id is not None
 
 
@@ -217,8 +227,9 @@ def test_fallback_log_never_contains_key_values():
     "выполни sudo rm -rf /",
 ])
 def test_shell_like_fol_command_gated(gate, command):
+    """Shell-like fol_command → STRICT_CONFIRM (level 5, modal)."""
     decision, action_id = gate.check("fol_command", {"command": command})
-    assert decision == GateDecision.CONFIRM, command
+    assert decision == GateDecision.STRICT_CONFIRM, command
     assert action_id is not None
 
 
@@ -229,8 +240,9 @@ def test_shell_like_fol_command_gated(gate, command):
     "прибавь громкость",
 ])
 def test_benign_fol_command_not_gated(gate, command):
+    """Benign fol_command → CONFIRM (level 4, file-mutation tier)."""
     decision, _ = gate.check("fol_command", {"command": command})
-    assert decision == GateDecision.OK, command
+    assert decision == GateDecision.CONFIRM, command
 
 
 # --- web-tier execution never bypasses the gate ------------------------------

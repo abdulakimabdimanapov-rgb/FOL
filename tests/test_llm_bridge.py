@@ -144,6 +144,101 @@ class TestDelegation:
 
 
 # ===========================================================================
+# Bridge -> BrainInterface (CurrentLLMAdapter -> canonical router)
+# ===========================================================================
+
+
+class TestBridgeThroughBrainInterface:
+    """The bridge must sit on the ONE canonical abstraction: it routes every
+    call through ``CurrentLLMAdapter`` (BrainInterface) rather than touching
+    the router directly."""
+
+    def test_brain_wraps_the_canonical_router(self):
+        from modules.llm.brain import CurrentLLMAdapter
+
+        fake = _FakeRouter()
+        with patch("llm_bridge._canonical_router", return_value=fake):
+            brain = llm_bridge._brain()
+        assert isinstance(brain, CurrentLLMAdapter)
+        assert brain._router is fake
+
+    def test_brain_none_when_canonical_missing(self):
+        with patch("llm_bridge._canonical_router", return_value=None):
+            assert llm_bridge._brain() is None
+
+    def test_sync_empty_preserves_legacy_contract(self):
+        """Router returning '' must surface as '' (never a raise)."""
+        empty = _FakeRouter()
+        empty.complete_sync = lambda *a, **kw: ""
+        with patch("llm_bridge._canonical_router", return_value=empty):
+            assert llm_completion_sync([{"role": "user", "content": "hi"}]) == ""
+
+    def test_astream_tools_forwarded_through_brain(self):
+        fake = _FakeRouter()
+        tools = [{"name": "open_app", "description": "Open an app"}]
+        with patch("llm_bridge._canonical_router", return_value=fake):
+            _collect_async(llm_astream(
+                [{"role": "user", "content": "open Safari"}], tools=tools))
+        assert fake.astream_kwargs[0]["tools"] == tools
+
+    def test_acomplete_tools_forwarded_through_brain(self):
+        fake = _FakeRouter()
+        tools = [{"name": "browser_search", "description": "Search"}]
+        with patch("llm_bridge._canonical_router", return_value=fake):
+            result = _run(llm_acompletion(
+                [{"role": "user", "content": "search"}], tools=tools))
+        assert result["content"] == "answer"
+        assert fake.acomplete_kwargs[0]["tools"] == tools
+
+    def test_bridge_never_bypasses_brain(self):
+        """No public bridge function may call the router directly: each one
+        must go through ``_brain()`` (CurrentLLMAdapter)."""
+        from unittest.mock import AsyncMock
+
+        brain = MagicMock()
+        brain.chat_stream.return_value = _gen([{"type": "token", "text": "x"}])
+        brain.acomplete = AsyncMock(return_value={"content": "x", "tool_calls": [], "stop_reason": "end_turn"})
+        brain.chat.return_value = "x"
+        brain.model_chain.return_value = ["m"]
+        brain.available_providers.return_value = ["m"]
+        brain.test_connection.return_value = "ok"
+
+        with patch("llm_bridge._brain", return_value=brain):
+            assert _collect_async(llm_astream([{"role": "user", "content": "hi"}]))[0]["type"] == "token"
+            assert _run(llm_acompletion([{"role": "user", "content": "hi"}]))["content"] == "x"
+            assert llm_completion_sync([{"role": "user", "content": "hi"}]) == "x"
+            assert llm_bridge._get_model_chain() == ["m"]
+            assert available_providers() == ["m"]
+            assert llm_bridge.test_connection() == "ok"
+            brain.chat_stream.assert_called_once()
+            brain.acomplete.assert_awaited_once()
+            brain.chat.assert_called_once()
+
+    def test_suggestion_engine_calls_the_brain(self):
+        """The suggestion engine (a runtime consumer) must go through
+        BrainInterface, not the bridge or the router directly."""
+        import suggestion_engine
+
+        brain = MagicMock()
+        brain.chat.return_value = '{"suggestions": []}'
+        with patch("modules.llm.brain.get_brain", return_value=brain):
+            out = suggestion_engine._call_llm_sync("system prompt", "user content")
+        assert out == '{"suggestions": []}'
+        brain.chat.assert_called_once()
+        call_kwargs = brain.chat.call_args.kwargs
+        assert call_kwargs["system"] == "system prompt"
+        assert call_kwargs["max_tokens"] == 2048
+
+    def test_suggestion_engine_failure_returns_empty(self):
+        import suggestion_engine
+
+        brain = MagicMock()
+        brain.chat.side_effect = RuntimeError("brain down")
+        with patch("modules.llm.brain.get_brain", return_value=brain):
+            assert suggestion_engine._call_llm_sync("s", "u") == ""
+
+
+# ===========================================================================
 # Contract parity with the legacy adapter
 # ===========================================================================
 
