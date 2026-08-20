@@ -1,151 +1,284 @@
-# FOL — Персональный AI-ассистент (JARVIS для macOS)
+# FOL — Personal AI Assistant (JARVIS for macOS)
 
-> **Статус: v1.0.0** — стабильный релиз, 989+ тестов, 5 сценариев ежедневного использования работают от начала до конца.
+> **Status: v1.0.0** — stable release, 989+ tests, 5 real-world daily-use scenarios working end-to-end.
 
-**Единый проект** — FOL: Python AI-ядро + SwiftUI macOS приложение.
+**One unified project** — FOL: Python AI core + native SwiftUI macOS application.
 
-## Что это
+## What is FOL?
 
-FOL — **цифровой двойник**, AI-ассистент, который:
-- 🖥️ Живёт на **MacBook** в вырезе (Notch UI)
-- 🧠 Имеет **JARVIS-подобные** возможности (голос, зрение, память, инструменты)
-- 🔄 Понимает **контекст** экрана, почты, календаря
-- 📝 Пишет в **живую память** (Obsidian + episodic)
-- 🤖 **Агентный цикл**: сам выбирает инструменты, выполняет, проверяет результат
+FOL is a **digital twin** and personal AI assistant that:
 
-## Рабочие сценарии (проверено end-to-end)
+* 🖥️ Lives on your **MacBook** inside the notch with a native Notch UI
+* 🧠 Provides **JARVIS-like capabilities** including voice, vision, memory, and tools
+* 🔄 Understands **context** from your screen, email, calendar, and active applications
+* 📝 Writes to **live memory** using Obsidian + episodic memory
+* 🤖 Uses an **agentic loop** to select tools, execute actions, verify results, and respond
 
-| Сценарий | Как работает |
-|---|---|
-| «Открой Safari и найди новости об OpenAI» | открывает Safari → ищет → возвращает сводку |
-| «Напиши письмо преподавателю» | спрашивает контакт / использует Google OAuth |
-| «Создай событие в календаре» | `create_event` через Google Calendar |
-| «Открой проект FOL» | Finder + клавиатурные команды |
-| «Запомни, что завтра отправить отчёт» | `save_to_obsidian` → живая память |
+## Working End-to-End Scenarios
 
-## Быстрый старт
+| Scenario                                           | How it works                                                 |
+| -------------------------------------------------- | ------------------------------------------------------------ |
+| “Open Safari and find the latest OpenAI news”      | Opens Safari → searches → returns a summary                  |
+| “Write an email to my teacher”                     | Asks for the contact or uses Google OAuth                    |
+| “Create a calendar event”                          | Uses `create_event` through Google Calendar                  |
+| “Open the FOL project”                             | Uses Finder + keyboard automation                            |
+| “Remember that I need to send the report tomorrow” | Saves the information using `save_to_obsidian` → live memory |
+
+## Quick Start
 
 ```bash
-# 1. Настрой LLM в .env (см. раздел «LLM» ниже)
-cp .env.example .env   # или отредактируй существующий .env
+# 1. Configure your LLM in .env (see the "LLM" section below)
+cp .env.example .env   # or edit your existing .env
 
-# 2. Установи зависимости
+# 2. Install dependencies
 pip install -r requirements.txt
 
-# 3. Запусти все сервисы
+# 3. Start all services
 ./run_all.sh
 
-# 4. Или по отдельности:
-./run_all.sh orchestrator   # AI сервер (порт 8420)
-./run_all.sh agent          # Десктоп-контроль (порт 8421)
-./run_all.sh fol            # FOL API с JARVIS-командами (порт 8754)
-./run_all.sh swift          # SwiftUI macOS приложение
+# 4. Or start services individually:
+./run_all.sh orchestrator   # AI server (port 8420)
+./run_all.sh agent          # Desktop control (port 8421)
+./run_all.sh fol            # FOL API with JARVIS commands (port 8754)
+./run_all.sh swift          # SwiftUI macOS application
 ```
 
-## LLM — настройка через .env
+## LLM Configuration
 
-Всё работает через **LiteLLM** — одна строка меняет модель:
+Everything runs through **LiteLLM**, so changing the model only requires changing one line:
 
 ```env
-# Бесплатно (OpenRouter free-модели, 120B — отлично для tool calling)
+# Free (OpenRouter free models, 120B — excellent for tool calling)
 LLM_MODEL=openrouter/nvidia/nemotron-3-super-120b-a12b:free
 OPENROUTER_API_KEY=sk-or-v1-...
 
-# Или локально (Ollama) — без API, но слабее для 50 инструментов
+# Or locally (Ollama) — no API required, but weaker for 50+ tools
 LLM_MODEL=ollama/llama3.2:3b
 
-# Или платно (после пополнения кредитов)
+# Or paid (after adding credits)
 LLM_MODEL=openai/gpt-4o-mini
 OPENAI_API_KEY=sk-proj-...
 
-# Лимит токенов ответа (учитывай баланс провайдера)
+# Maximum response tokens (depends on provider balance/limits)
 LLM_MAX_TOKENS=1500
 
-# Фолбэк: если основная модель недоступна (лимит/аутэдж) — пробуем по очереди
+# Fallback: if the primary model is unavailable,
+# try these models in order
 LLM_FALLBACK_MODELS=ollama/llama3.2:3b
 ```
 
-**Автопереключение моделей.** Если основная модель недоступна (исчерпан бесплатный лимит, аутэдж провайдера, ошибка API), ассистент автоматически пробует модели из `LLM_FALLBACK_MODELS` по порядку. Модели без настроенного API-ключа пропускаются, поэтому система работает, пока доступна хотя бы одна модель. Цепочка логируется на старте: `Model chain: ... -> ...`.
+### Automatic Model Failover
 
-**Ключевое преимущество — двухэтапный выбор инструментов.** Модель никогда не видит все 50 инструментов сразу: сначала запрос классифицируется (email/calendar/memory/web/coding/desktop), и модель получает только 5–12 релевантных. Поэтому даже 3B-модель выбирает инструменты правильно, а 120B — работает идеально.
+If the primary model becomes unavailable due to a free-tier limit, provider outage, API error, or other failure, FOL automatically tries the models listed in `LLM_FALLBACK_MODELS` in order.
 
-## Архитектура
+Models without a configured API key are automatically skipped.
 
+This allows the system to keep working as long as at least one model is available.
+
+The model chain is logged during startup:
+
+```text
+Model chain: primary -> fallback -> ...
 ```
-Пользователь (Notch UI / Web / Голос)
-      │
-      ▼
+
+### Two-Stage Tool Selection
+
+One of FOL's key architectural advantages is its **two-stage tool selection system**.
+
+The LLM never receives all 50+ tools at once.
+
+Instead:
+
+```text
+User request
+     ↓
+Category classification
+     ↓
+Email / Calendar / Memory / Web / Coding / Desktop
+     ↓
+5–12 relevant tools
+     ↓
+LLM tool selection
+     ↓
+Tool execution
+```
+
+This significantly reduces tool-selection complexity.
+
+Even smaller models such as 3B models can select tools reliably, while larger models such as 120B models provide much stronger reasoning and tool-calling performance.
+
+## Architecture
+
+```text
+User (Notch UI / Web / Voice)
+          │
+          ▼
 Orchestrator (FastAPI, :8420)
-      │   роутер агентов (General/Architect/Coder/Reviewer/Researcher/Memory)
-      │   двухэтапный выбор инструментов (категория → 5-12)
-      │   loop guard (защита от зацикливания)
-      ▼
+          │
+          │ Agent Router
+          │ General / Architect / Coder / Reviewer /
+          │ Researcher / Memory
+          │
+          │ Two-stage tool selection
+          │ Category → 5–12 relevant tools
+          │
+          │ Loop Guard
+          ▼
 LLM (LiteLLM: OpenRouter / Ollama / OpenAI)
-      │   tool calls
-      ▼
-Execution: Agent Server (:8421) · Productivity (Gmail/Calendar) · Obsidian · FOL (:8754)
-      │
-      ▼
-Результат возвращается в LLM → финальный ответ (SSE-стриминг в UI)
+          │
+          │ Tool Calls
+          ▼
+Execution Layer
+    │
+    ├── Agent Server (:8421)
+    ├── Productivity (Gmail / Calendar)
+    ├── Obsidian
+    └── FOL API (:8754)
+          │
+          ▼
+Tool Result → LLM
+          │
+          ▼
+Final Response
+          │
+          ▼
+SSE Streaming → UI
 ```
 
-## Структура проекта
+## Project Structure
 
-```
+```text
 SecondSelf/
-├── SecondSelf/              # SwiftUI macOS приложение (Notch UI, голос, анимации)
-├── orchestrator/            # FastAPI AI-сервер (порт 8420) — агенты, tools, память
-│   ├── agents/              # General/Architect/Coder/Reviewer/Researcher/Memory + роутер
+├── SecondSelf/              # SwiftUI macOS app (Notch UI, voice, animations)
+├── orchestrator/            # FastAPI AI server (:8420)
+│   ├── agents/              # General/Architect/Coder/Reviewer/Researcher/Memory + router
 │   └── productivity_tools.py# Gmail, Calendar, Docs, web search
-├── agent-server/            # Десктоп/браузер контроль (порт 8421)
-├── fol/                     # Python AI-ядро FOL (порт 8754)
-├── src/                     # Next.js web интерфейс (SSE-чат)
+├── agent-server/            # Desktop/browser control (:8421)
+├── fol/                     # Python AI core / FOL API (:8754)
+├── src/                     # Next.js web interface (SSE chat)
 ├── auth/                    # Google OAuth (Gmail/Calendar)
-├── fetch/                   # Gmail, Tavily, Calendar fetch
-├── analyze/                 # LLM-слой, анализ (voice, behavior, topics)
-├── obsidian/                # Живая память (vault, linker, tools)
-├── context_engine/          # Контекст экрана (активное приложение, URL)
+├── fetch/                   # Gmail, Tavily, Calendar fetchers
+├── analyze/                 # LLM layer and analysis (voice, behavior, topics)
+├── obsidian/                # Live memory (vault, linker, tools)
+├── context_engine/          # Screen context (active app, URL)
 ├── utils/                   # episodic_writer, daily_tracker, text_normalizer
-├── cookie_sync/             # Перенос cookies Chrome в агент-браузер
-├── tests/                   # 989+ тестов
+├── cookie_sync/             # Chrome cookie synchronization
+├── tests/                   # 989+ tests
 ├── scripts/
-│   ├── verify_scenarios.sh  # Авто-проверка 5 сценариев
-│   └── demo.sh              # Гарнесс для записи видео-демо
+│   ├── verify_scenarios.sh  # Automated verification of 5 scenarios
+│   └── demo.sh              # Demo recording harness
 ├── Dockerfile / docker-compose.yml / .github/workflows/
-└── run_all.sh               # Единый лаунчер
+└── run_all.sh               # Unified launcher
 ```
 
-## Демо (для записи видео)
+## Demo
+
+Use the following script to run the complete demo:
 
 ```bash
-./scripts/demo.sh              # 5 сценариев с паузами для нарезки
-DEMO_PAUSE=5 ./scripts/demo.sh # короткие паузы
-DEMO_QUICK=1 ./scripts/demo.sh # без пауз (проверка)
+./scripts/demo.sh
 ```
 
-Сценарии демо: «Open Safari» → «Find the latest OpenAI news» → «Remember I need to send the report tomorrow» → «Open the FOL project» → «Create a calendar event».
+For shorter pauses:
 
-## Качество
+```bash
+DEMO_PAUSE=5 ./scripts/demo.sh
+```
 
-- **989+ тестов** (`python3 -m pytest tests/ -v`) — роутер, нормализация, память, инструменты, SSE, loop guard, фолбэк моделей, response formatter
-- **Loop guard**: агент не может зациклиться — повторный вызов инструмента N раз прерывается с валидной историей
-- **Memory**: identity.md / preferences.md / episodic.md + Obsidian + daily tracker
-- **CI**: `.github/workflows/test.yml` — pytest + Swift build на каждый push
+For a quick verification without pauses:
 
-## Порты
+```bash
+DEMO_QUICK=1 ./scripts/demo.sh
+```
 
-| Порт | Сервис | Описание |
-|------|--------|----------|
-| 8420 | Orchestrator | Главный AI-сервер (SSE /chat) |
-| 8421 | Agent Server | Десктоп/браузер контроль |
-| 8754 | FOL API | JARVIS-команды |
-| 3000 | Next.js | Web интерфейс |
-| 11434 | Ollama | Локальный LLM (опционально) |
+### Demo Scenarios
 
-## Документация
+1. **“Open Safari”**
+2. **“Find the latest OpenAI news”**
+3. **“Remember I need to send the report tomorrow”**
+4. **“Open the FOL project”**
+5. **“Create a calendar event”**
 
-- **`CHANGELOG.md`** — история версий (текущая: **v1.0.0**)
-- **`MERGED_README.md`** — полная документация о слиянии проектов
-- **`FOL_UPGRADE.md`** — мастер-документ архитектуры
-- **`CLAUDE.md`** — контекст для AI-модели
-- **`DESIGN.md`** — дизайн-система
+## Quality & Reliability
+
+* **989+ tests** using `python3 -m pytest tests/ -v`
+* Router and agent tests
+* Text normalization
+* Memory system
+* Tool execution
+* SSE streaming
+* Loop guard
+* Model fallback system
+* Response formatter
+* End-to-end scenario verification
+
+### Loop Guard
+
+The agent cannot get stuck in an infinite tool-execution loop.
+
+If the same tool is repeatedly called beyond the configured limit, the loop guard interrupts execution while preserving a valid conversation history.
+
+### Memory
+
+FOL maintains multiple layers of persistent memory:
+
+```text
+identity.md
+preferences.md
+episodic.md
+      │
+      ├── Obsidian
+      └── Daily Tracker
+```
+
+This allows FOL to maintain context across conversations and sessions.
+
+### CI
+
+GitHub Actions automatically runs:
+
+* Python test suite
+* Swift build
+* Integration checks
+
+on every push.
+
+## Ports
+
+|  Port | Service      | Description                  |
+| ----: | ------------ | ---------------------------- |
+|  8420 | Orchestrator | Main AI server / SSE `/chat` |
+|  8421 | Agent Server | Desktop and browser control  |
+|  8754 | FOL API      | JARVIS commands              |
+|  3000 | Next.js      | Web interface                |
+| 11434 | Ollama       | Optional local LLM           |
+
+## Documentation
+
+* **`CHANGELOG.md`** — version history, currently **v1.0.0**
+* **`MERGED_README.md`** — complete documentation about the project merge
+* **`FOL_UPGRADE.md`** — master architecture document
+* **`CLAUDE.md`** — AI model context and development instructions
+* **`DESIGN.md`** — design system
+
+## Project Vision
+
+FOL is designed to become more than a chatbot.
+
+The goal is a **persistent AI companion for macOS** that can understand context, remember information, interact with applications, use tools, and act on the user's behalf while keeping the user in control.
+
+```text
+SEE
+ ↓
+UNDERSTAND
+ ↓
+PLAN
+ ↓
+ACT
+ ↓
+VERIFY
+ ↓
+REMEMBER
+```
+
+**FOL is the AI layer between you and your Mac.**
