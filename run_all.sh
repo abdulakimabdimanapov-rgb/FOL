@@ -154,13 +154,13 @@ start_agent() {
 # ─── Start SwiftUI app ────────────────────────────────────────────
 start_swift() {
     echo -e "${BLUE}── Starting SwiftUI app ──${NC}"
-    if [ -d "SecondSelf" ]; then
-        cd SecondSelf
-        SWIFT_PID=$(detach /tmp/secondself_swift.log swift run)
+    if [ -d "fol-app" ]; then
+        cd fol-app
+        SWIFT_PID=$(detach /tmp/fol_swift.log swift run)
         cd ..
-        echo -e "${GREEN}✓ SwiftUI app starting (PID: $SWIFT_PID, log: /tmp/secondself_swift.log)${NC}"
+        echo -e "${GREEN}✓ SwiftUI app starting (PID: $SWIFT_PID, log: /tmp/fol_swift.log)${NC}"
     else
-        echo -e "${RED}✗ SecondSelf/ directory not found${NC}"
+        echo -e "${RED}✗ fol-app/ directory not found${NC}"
     fi
 }
 

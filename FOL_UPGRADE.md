@@ -17,7 +17,7 @@
 - Понимает **контекст** экрана, почты, календаря
 - Постоянно **в фоне** анализирует и предлагает действия
 - Пишет в **память** (identity, preferences, episodic события)
-- Использует **LLM** (Claude Sonnet 4 / Ollama локально)
+- Использует **LLM** (API-провайдеры: OpenRouter / OpenAI / Anthropic — без локальных моделей)
 
 **Текущее состояние:** Layers 1-5 работают. Layer 6 и Mobile Companion — в разработке.
 
@@ -31,7 +31,7 @@
 │                                                     │
 │  ┌──────────────────┐    ┌──────────────────────┐   │
 │  │  UI Layer         │    │  Server Layer         │   │
-│  │  SecondSelf.app   │◄──►│  Orchestrator :8420   │   │
+│  │  FOL.app         │◄──►│  Orchestrator :8420   │   │
 │  │  (SwiftUI)        │SSE │  (FastAPI + Claude)   │   │
 │  │  ┌─────────────┐  │    │  ┌────────────────┐  │   │
 │  │  │ Notch Panel  │  │    │  │ Agent Loop     │  │   │
@@ -83,7 +83,7 @@
 |-----------|-----------|------|
 | `orchestrator/server.py` | FastAPI + Anthropic SDK | LLM-маршрутизация, agentic loop, SSE |
 | `agent-server/server.py` | Python HTTP Server | PyAutoGUI десктоп, browser CDP, MJPEG |
-| `SecondSelf/` | SwiftUI + NSPanel | Notch UI, чат, A2UI рендеринг, VNC |
+| `fol-app/` | SwiftUI + NSPanel | Notch UI, чат, A2UI рендеринг, VNC |
 | `main.py` | Python CLI | Identity pipeline (Layers 1-4) |
 | `src/auth/` | Auth0 / Firebase / Google OAuth | Аутентификация |
 | `cookie_sync/` | Chrome CDP | Перенос сессий из Chrome → agent browser |
@@ -347,7 +347,7 @@ POST /chat {"message": "..."}
 ## 6. СТРУКТУРА ПРОЕКТА
 
 ```
-/Users/USER/Desktop/SecondSelf/
+/Users/USER/Desktop/Fol/
 ├── FOL_UPGRADE.md               ← ВЫ ЗДЕСЬ
 ├── CLAUDE.md                     # Оригинальный контекст (Layer 1 pipeline)
 ├── README.md                     # Основное README
@@ -356,8 +356,8 @@ POST /chat {"message": "..."}
 ├── requirements.txt              # Python зависимости
 ├── package.json / next.config    # Next.js (web onboarding)
 │
-├── SecondSelf/                   # SwiftUI macOS приложение
-│   ├── SecondSelfApp.swift       # Entry point, AppDelegate
+├── fol-app/                     # SwiftUI macOS приложение
+│   ├── FOLApp.swift              # Entry point, AppDelegate
 │   ├── NotchOverlayController.swift  # Notch управление
 │   ├── NotchPanel.swift          # NSPanel (кастомный, без DynamicNotchKit)
 │   ├── ViewModels/
@@ -513,7 +513,7 @@ POST /chat {"message": "..."}
 3. **Прочитай CLAUDE.md** — детали Identity Pipeline.
 4. **Прочитай DESIGN.md** — дизайн-система (цвета, шрифты, анимации).
 5. **Прочитай `orchestrator/server.py`** — главный файл: LLM + tool loop + SSE.
-6. **Посмотри `SecondSelf/`** — SwiftUI UI слой.
+6. **Посмотри `fol-app/`** — SwiftUI UI слой.
 
 ### Что важно:
 - **Не переписывай работающий код.** Только добавляй новый или рефактори.
@@ -538,7 +538,7 @@ POST /chat {"message": "..."}
 python main.py
 
 # SwiftUI приложение
-cd SecondSelf && swift build && swift run
+cd fol-app && swift build && swift run
 
 # Отдельно сервера
 python orchestrator/server.py     # :8420
@@ -558,7 +558,7 @@ python orchestrator/test_server.py   # Тесты orchestatora
 | Дата | Решение | Причина |
 |------|---------|---------|
 | 2026-03 | DynamicNotchKit → кастомный NSPanel | Убрали зависимость, Swift 6 совместимость |
-| 2026-03 | Ollama как fallback модель | Локальный режим без API ключей |
+| 2026-08 | Отказ от локальных LLM (Ollama/MLX) | Политика «без локальных ИИ» — только API-провайдеры; mlx-whisper для STT сохранён |
 | 2026-03 | Obsidian как долговременная память | Markdown-native, связи между заметками |
 | 2026-03 | Один интеллект на MacBook | Телефон только интерфейс |
 | 2026-03 | A2UI протокол для UI компонентов | Структурированные карточки вместо текста |

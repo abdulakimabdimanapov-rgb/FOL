@@ -1,11 +1,11 @@
 #!/bin/bash
 # Build FOL as a macOS .pkg installer
 # Usage: ./build-pkg.sh
-# Produces: build/Second-Self.pkg
+# Produces: build/FOL-<VERSION>.pkg
 #
 # Builds the native Swift binary first, then packages into .pkg.
 # The .pkg installs:
-#   - /Applications/Second Self.app   (native SwiftUI app)
+#   - /Applications/FOL.app   (native SwiftUI app)
 #   - /usr/local/share/second-self/   (Python backend services + new modules)
 #   - Postinstall: Gatekeeper bypass, pip deps, .env setup
 
@@ -14,21 +14,15 @@ set -euo pipefail
 REPO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$REPO_DIR"
 
-APP_NAME="Second Self"
+APP_NAME="FOL"
 BUNDLE_ID="com.secondself.app"
 VERSION="${VERSION:-$(cat "$REPO_DIR/VERSION" 2>/dev/null || echo '0.2.0')}"
 BUILD_DIR="$REPO_DIR/build"
 PKG_ROOT="$BUILD_DIR/pkg-root"
 SCRIPTS_DIR="$BUILD_DIR/pkg-scripts"
-# Check for existing app (spaced or non-spaced name)
-if [ -d "$BUILD_DIR/Second Self.app" ]; then
-    NATIVE_BINARY="$BUILD_DIR/Second Self.app"
-elif [ -d "$BUILD_DIR/SecondSelf.app" ]; then
-    NATIVE_BINARY="$BUILD_DIR/SecondSelf.app"
-else
-    NATIVE_BINARY="$BUILD_DIR/SecondSelf.app"
-fi
-PKG_FILE="$BUILD_DIR/Second-Self-$VERSION.pkg"
+# The .app bundle is built by build-app.sh into build/FOL.app
+NATIVE_BINARY="$BUILD_DIR/FOL.app"
+PKG_FILE="$BUILD_DIR/FOL-$VERSION.pkg"
 
 echo "============================================"
 echo "  Building $APP_NAME v$VERSION"
@@ -38,15 +32,15 @@ echo ""
 # ─── Step 1: Build native binary or verify it exists ───
 if [ ! -d "$NATIVE_BINARY" ]; then
     echo "📦 Native app not found, building..."
-    cd "$REPO_DIR/SecondSelf"
+    cd "$REPO_DIR/fol-app"
 
     # Try swift build first (preferred)
     if command -v swift &>/dev/null && swift build -c release 2>/dev/null; then
-        BINARY=$(swift build -c release --show-bin-path 2>/dev/null)/SecondSelf
+        BINARY=$(swift build -c release --show-bin-path 2>/dev/null)/FOL
         if [ -f "$BINARY" ]; then
             mkdir -p "$NATIVE_BINARY/Contents/MacOS" "$NATIVE_BINARY/Contents/Resources"
-            cp "$BINARY" "$NATIVE_BINARY/Contents/MacOS/SecondSelf"
-            chmod +x "$NATIVE_BINARY/Contents/MacOS/SecondSelf"
+            cp "$BINARY" "$NATIVE_BINARY/Contents/MacOS/FOL"
+            chmod +x "$NATIVE_BINARY/Contents/MacOS/FOL"
             echo "  ✅ Swift build successful"
         else
             echo "  ❌ Swift binary not found — build failed"
@@ -60,13 +54,13 @@ if [ ! -d "$NATIVE_BINARY" ]; then
     # Ensure Info.plist exists
     if [ ! -f "$NATIVE_BINARY/Contents/Info.plist" ]; then
         mkdir -p "$NATIVE_BINARY/Contents"
-        cp "$REPO_DIR/SecondSelf/Info.plist" "$NATIVE_BINARY/Contents/Info.plist" 2>/dev/null || cat > "$NATIVE_BINARY/Contents/Info.plist" << PLIST
+        cp "$REPO_DIR/fol-app/Info.plist" "$NATIVE_BINARY/Contents/Info.plist" 2>/dev/null || cat > "$NATIVE_BINARY/Contents/Info.plist" << PLIST
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"
   "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
-    <key>CFBundleExecutable</key><string>SecondSelf</string>
+    <key>CFBundleExecutable</key><string>FOL</string>
     <key>CFBundleIdentifier</key><string>com.secondself.app</string>
     <key>CFBundleName</key><string>FOL</string>
     <key>CFBundleVersion</key><string>$VERSION</string>
@@ -161,8 +155,8 @@ auth0-python>=4.0.0
 PyJWT>=2.8.0
 
 # FOL Engine (JARVIS-style commands)
+# mlx / mlx-whisper are for local STT only; mlx-lm (local LLM) is removed.
 mlx>=0.19.0
-mlx-lm>=0.19.0
 mlx-whisper>=0.4.0
 chromadb>=0.5.5
 sqlalchemy>=2.0.35
@@ -192,7 +186,7 @@ cat > "$SCRIPTS_DIR/postinstall" << 'POSTINSTALL'
 set -e
 
 INSTALL_DIR="/usr/local/share/second-self"
-APP_DIR="/Applications/Second Self.app"
+APP_DIR="/Applications/FOL.app"
 REAL_USER=$(stat -f '%Su' /dev/console 2>/dev/null || echo "")
 REAL_HOME=$(dscl . -read "/Users/$REAL_USER" NFSHomeDirectory 2>/dev/null | awk '{print $2}' || echo "")
 LOG="/tmp/secondself-install.log"
@@ -227,11 +221,11 @@ if [ ! -f "$ENV_FILE" ]; then
 # FOL — Configuration
 # Get API keys and add them below
 
-# LLM (choose one)
-# LLM_MODEL=ollama/llama3.2:3b      # Local (free, needs Ollama)
+# LLM (choose one) — API providers only. Local LLMs (Ollama/MLX) are
+# removed from FOL by policy: no local inference, no hardware heating.
 LLM_MODEL=claude-sonnet-4-20250514   # Cloud (needs ANTHROPIC_API_KEY)
 # LLM_MODEL=gpt-4o                    # Cloud (needs OPENAI_API_KEY)
-# LLM_FALLBACK_MODELS=ollama/llama3.2:3b   # Backup models, tried if primary is unavailable
+# LLM_FALLBACK_MODELS=openrouter/nvidia/nemotron-3-ultra-550b-a55b:free   # Backup models
 
 # API Keys
 ANTHROPIC_API_KEY=

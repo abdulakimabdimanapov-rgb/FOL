@@ -2,7 +2,7 @@
 
 > 📐 **Master architecture:** `FOL_UPGRADE.md` — полный план развития проекта.
 > 🎯 **Design system:** `DESIGN.md` — цвета, шрифты, анимации.
-> 🔧 **Quick start:** `cd SecondSelf && swift build && swift run`
+> 🔧 **Quick start:** `cd fol-app && swift build && swift run`
 
 ---
 
@@ -10,7 +10,7 @@
 
 ### 1.1 VoiceInputButton — Анимация пульсации при записи
 
-**Файл:** `SecondSelf/Views/VoiceInputButton.swift`
+**Файл:** `fol-app/Views/VoiceInputButton.swift`
 
 - Idle: оливковая иконка микрофона
 - Recording: **две пульсирующие кольцевые обводки** + свечение (`glowRadius`)
@@ -20,7 +20,7 @@
 
 ### 1.2 AudioWaveformView — Физическая симуляция волн
 
-**Файл:** `SecondSelf/Views/ChatInputBar.swift`
+**Файл:** `fol-app/Views/ChatInputBar.swift`
 
 - Каждая полоска — масса-пружина-демпфер (`stiffness: 180`, `damping: 12`)
 - Волна распространяется от центра к краям с затуханием
@@ -30,7 +30,7 @@
 
 ### 1.3 Shimmer/Glow эффект на поле ввода
 
-**Файл:** `SecondSelf/Views/ChatInputBar.swift`
+**Файл:** `fol-app/Views/ChatInputBar.swift`
 
 - **Shimmer-полоса**: анимированный градиент слева направо (1.8s)
 - **Пульсирующая рамка**: `Color.ssCream` пульсирует 0→35% (1.2s)
@@ -39,7 +39,7 @@
 
 ### 1.4 ChatView — Плавное появление сообщений
 
-**Файл:** `SecondSelf/Views/ChatView.swift`
+**Файл:** `fol-app/Views/ChatView.swift`
 
 - `.asymmetric` transition: вставка с `offset(y: 8)` + scale + opacity
 - Исчезновение: только scale + opacity
@@ -99,6 +99,77 @@
 - `llm_call`, `llm_acompletion`, `llm_astream`, `llm_completion_sync` — пробуют модели по очереди; фолбэк срабатывает при отказе (лимит, аутэдж), в стриминге — при открытии стрима
 - Старт orchestrator логирует `Model chain: ... -> ...`
 - Фикс в `_llm_async.py`: `openrouter/` проверяется ДО `"anthropic"` substring (как в sync-версии)
+
+### 1.9 Brain-бэкенды — архитектура мозга FOL
+
+**Файлы:** `fol/modules/llm/brain.py`, `fol/modules/llm/brain_router.py`, `fol/modules/llm/freebuff.py`, `fol/modules/llm/codebuff_adapter.py`
+
+FOL поддерживает несколько brain-бэкендов через единую абстракцию `BrainInterface`:
+
+| Бэкенд | Класс | Env | Статус |
+|--------|-------|-----|--------|
+| **current** | `CurrentLLMAdapter` | `FOL_BRAIN=current` | ✅ Рабочий (LiteLLM: OpenRouter/Ollama/MLX) |
+| **freebuff** | `FreebuffBrainAdapter` | `FOL_BRAIN=freebuff` | ⚠️ Требует `FREEBUFF_API_URL` |
+| **codebuff** | `CodebuffSDKBrainAdapter` | `FOL_BRAIN=codebuff` | ✅ Рабочий (через `@codebuff/sdk`) |
+
+**`brain.py` — ядро:**
+- `BrainInterface` — абстрактный контракт: `chat()`, `chat_stream()`, `acomplete()`, `classify()`, `plan()`, `select_tools()`, `summarize()`, `verify()`
+- `CurrentLLMAdapter` — обёртка над `LiteLLMRouter`, передаёт `model=` и `api_key=` в каждый метод
+- `FreebuffBrainAdapter` — placeholder; `available=False` до появления HTTP API Freebuff
+- `get_brain(name)` — фабрика: возвращает `CurrentLLMAdapter` (default) или `CodebuffSDKBrainAdapter`
+
+**`codebuff_adapter.py` — Codebuff SDK (новый):**
+- Запускает Codebuff агентов через `npx codebuff run --json`
+- Парсит streaming JSON-lines вывода
+- Реализует `chat()`, `chat_stream()`, `acomplete()`
+- Используется для переобучения мозга на основе базы знаний
+
+**`brain_router.py` — роутинг с фолбэком:**
+- `BrainRouter([brain1, brain2, ...])` — пробует бэкенды по очереди
+- Автоматический fallback при ошибке
+- Мониторинг здоровья бэкендов
+
+**Активация:**
+```bash
+# По умолчанию (current)
+FOL_BRAIN=current
+
+# Codebuff SDK
+FOL_BRAIN=codebuff
+CODEBUFF_API_KEY=sk-...  # получить на codebuff.com/api-keys
+
+# Freebuff (требует HTTP API)
+FOL_BRAIN=freebuff
+FREEBUFF_API_URL=http://localhost:3000/api/v1
+FREEBUFF_API_TOKEN=...
+```
+
+### 1.10 Security-фиксы — Race Condition, Shell Injection, Memory Leak
+
+**Файлы:** `fol/modules/tools/gate.py`, `fol/core/app.py`
+
+**1. Race condition в ConfirmationGate:**
+- `asyncio.Lock()` на `_pending` и `_approved` словари
+- `_check_locked()` и `_approve_locked()` — внутренние методы без доп. блокировки
+- `check()`, `approve()`, `revoke_expired()` — асинхронные с `async with self._lock:`
+- Защита от конкурентных запросов в async-окружении
+
+**2. Shell injection в `_extract_shell_command`:**
+- `_DANGEROUS_CMD_PATTERNS` (frozenset) — 30+ опасных паттернов
+- Блокирует: `rm -rf /`, `fork bomb`, `curl|sh`, `eval`, `python -c 'import os'`, `shutdown`, `mkfs`, `chmod 777 /`, `launchctl remove` и т.д.
+- Regex-проверка pipe-to-shell: `curl ... | sh/bash/zsh/fish`
+- Defense-in-depth (поверх ConfirmationGate Level 5)
+
+**3. Memory leak в conversation history:**
+- `_max_history = 100` — лимит хранимых диалогов
+- `_record_turn()` обрезает историю через `self._conversation_history[-self._max_history:]`
+- Защита от бесконечного роста памяти при долгих сессиях
+
+**Результат тестирования:**
+```
+✅ fol/tests/: 1073/1073 passed
+✅ Security tests: gate.py 92% coverage, app.py shell extraction: 39 tests
+```
 
 ## 2. АРХИТЕКТУРА BILINGUAL ROUTING (v2 — исправленная)
 
@@ -205,7 +276,7 @@ python -m pytest tests/test_router.py -v
 python -m pytest tests/test_normalize.py -v
 
 # Сборка SwiftUI приложения
-cd SecondSelf && swift build
+cd fol-app && swift build
 
 # Фильтры
 python3 -m pytest tests/test_router.py -v -k "russian"      # русские тесты
@@ -221,10 +292,10 @@ python3 -c "import ast; ast.parse(open('orchestrator/agents/router.py').read())"
 ### Результаты тестов (финальные)
 
 ```
-✅ 820 passed, 0 failed            # полный прогон tests/
-✅ test_router.py: 213 passed      # включая регрессионные тесты на "what" fix
-✅ test_normalize.py: 48 passed
-✅ Swift build: Build complete
+✅ fol/tests/: 1073 passed           # полный прогон FOL тестов
+✅ Swift build: Build complete         # fol-app сборка
+✅ Brain tests: 130 passed             # brain, brain_router, freebuff_adapter, gate
+✅ Shell command extract: 39 passed    # security patterns
 ✅ All diagnostics: pass
 ```
 
@@ -234,14 +305,20 @@ python3 -c "import ast; ast.parse(open('orchestrator/agents/router.py').read())"
 
 | Файл | Изменение |
 |------|-----------|
-| `SecondSelf/Views/VoiceInputButton.swift` | Анимация пульсации, pulse ring, glow |
-| `SecondSelf/Views/ChatInputBar.swift` | Physics waveform, shimmer/glow эффект |
-| `SecondSelf/Views/ChatView.swift` | Плавные transition сообщений |
+| `fol-app/Views/VoiceInputButton.swift` | Анимация пульсации, pulse ring, glow |
+| `fol-app/Views/ChatInputBar.swift` | Physics waveform, shimmer/glow эффект |
+| `fol-app/Views/ChatView.swift` | Плавные transition сообщений |
 | `orchestrator/agents/router.py` | Русские ключевые слова, bilingual routing, fuzzy matching, greeting detection |
 | `orchestrator/server.py` | normalize_user_input, typo map, system prompt bilingual |
 | `orchestrator/agents/__init__.py` | Исправлен импорт _TOOLS → _TOOLS_NAMES |
 | `tests/test_router.py` | 65 тестов для routing (НОВЫЙ ФАЙЛ) |
 | `tests/test_normalize.py` | 48 тестов для normalize (НОВЫЙ ФАЙЛ) |
+| `fol/modules/llm/brain.py` | BrainInterface — абстракция мозга, get_brain() фабрика |
+| `fol/modules/llm/brain_router.py` | BrainRouter — роутинг с фолбэком по бэкендам |
+| `fol/modules/llm/freebuff.py` | Конфигурация Freebuff Brain, FREEBUFF_REQUIREMENTS |
+| `fol/modules/llm/codebuff_adapter.py` | CodebuffSDKBrainAdapter — мозг через Codebuff SDK (НОВЫЙ ФАЙЛ) |
+| `fol/modules/tools/gate.py` | asyncio.Lock для thread-safe ConfirmationGate |
+| `fol/core/app.py` | _DANGEROUS_CMD_PATTERNS + _max_history=100 (security + memory leak fix) |
 | `CLAUDE.md` | Этот файл — единая документация |
 
 ---
@@ -250,7 +327,7 @@ python3 -c "import ast; ast.parse(open('orchestrator/agents/router.py').read())"
 
 ```bash
 # === BUILD ===
-cd SecondSelf && swift build           # Swift приложение
+cd fol-app && swift build           # Swift приложение
 python3 -m pytest tests/ -v            # Python тесты
 
 # === TEST SPECIFIC ===
@@ -260,7 +337,7 @@ python3 -m pytest tests/test_router.py -v -k "fuzzy"        # fuzzy matching
 python3 -m pytest tests/test_normalize.py -v -k "russian"   # русские алиасы
 
 # === RUN ===
-cd SecondSelf && swift run             # Запустить приложение
+cd fol-app && swift run             # Запустить приложение
 
 # === SMOKE TEST ===
 ./setup/smoke-test.sh                  # Проверка всех сервисов
@@ -308,16 +385,19 @@ for t in tests:
 ## 8. ВЫПОЛНЕННЫЕ КОМАНДЫ ИЗ CLAUDE.md
 
 ```
-✓ python3 -m pytest tests/ -v                    -> 536 passed, 3 failed (pre-existing)
+✓ python3 -m pytest tests/ -v                    -> 1073 passed (FOL)
 ✓ python3 -m pytest tests/test_router.py -v       -> 65 passed
 ✓ python3 -m pytest tests/test_normalize.py -v    -> 48 passed
 ✓ tests/test_router.py -k "russian"               -> 22 passed
 ✓ tests/test_router.py -k "bilingual"             -> 7 passed
 ✓ tests/test_router.py -k "fuzzy"                 -> 8 passed
 ✓ tests/test_normalize.py -k "russian"            -> 25 passed
-✓ cd SecondSelf && swift build                    -> Build complete
+✓ cd fol-app && swift build                    -> Build complete (45s)
 ✓ python3 -c "ast.parse(open('server.py'))"       -> server.py: OK
 ✓ python3 -c "ast.parse(open('router.py'))"       -> router.py: OK
+✓ python3 -c "ast.parse(open('fol/core/app.py'))" -> app.py: OK (shell injection fix)
 ✓ Router diagnostics                              -> All 18 tests pass
 ✓ normalize_user_input diagnostics                -> спс->спасибо, пж->пожалуйста и т.д.
+✓ Brain tests (brain + router + freebuff + gate) -> 130 passed
+✓ Security tests (shell extraction)              -> 39 passed
 ```

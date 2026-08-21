@@ -1,30 +1,105 @@
-# FOL (SecondSelf) — My Personal AI Assistant for macOS
+# FOL
 
-Hey! This is **FOL**, an AI assistant I built to run right on my MacBook. The main idea was to create a helper that sits in the screen notch, understands what I'm doing, and helps automate annoying daily desktop tasks without me having to switch windows or copy-paste things manually.
+FOL is an AI assistant for your Mac. It lives in the notch (top of the screen) and helps you with everyday tasks. It can open apps, search the web, write letters, remember things, and more.
 
-##  Why I Built It
+## What FOL can do
 
-I wanted an assistant that feels like a native part of macOS rather than just another open tab in a browser. I designed it to remember my context, help me with daily tasks, and execute desktop actions using simple voice commands or text.
+- **Open apps and control your computer** — just say "open Safari" or "close Chrome"
+- **Search the internet** — ask anything and FOL will find the answer
+- **Write things** — letters, emails, notes
+- **Remember things** — FOL saves notes to Obsidian so you don't forget
+- **Talk to you** — you can type or use voice (microphone button)
+- **Works in Russian and English** — you can mix both languages
 
-##  Main Features
+## How to install
 
-- **Notch UI:** A custom panel built with SwiftUI that sits right in the MacBook screen notch.
-- **Voice Control:** Uses local MLX Whisper on Apple Silicon so I can speak to it directly.
-- **Desktop Automation:** Can control apps, take screenshots, click buttons, and read browser context via PyAutoGUI and Chrome CDP.
-- **Safety Gate:** A 5-level risk system (`ConfirmationGate`) that asks for my manual approval before executing any sensitive action or system command.
-- **Memory Consolidation:** Automatically organizes daily notes, facts, and preferences into my Obsidian Vault.
-- **Bilingual Support:** Handles mixed English and Russian prompts easily.
+### What you need
 
-##  How It Works
+- Mac with Apple Silicon (M1, M2, M3, or M4)
+- macOS 14 or newer
+- Python 3 (install with `brew install python@3.12` if you don't have it)
 
-The system is split into three main parts:
-1. **Orchestrator (FastAPI, Port 8420):** Handles LLM routing, agent logic, and streaming responses back to the UI.
-2. **Agent Server (Python, Port 8421):** Executes desktop and browser commands on macOS.
-3. **FOL Core API (Port 8754):** Manages memory (Obsidian), local voice models (STT/TTS), and tool execution rules.
+### Step 1: Download
 
-##  Getting Started
+```bash
+git clone <repo-url> fol-app
+cd fol-app
+```
 
-1. Clone the repository and set up your `.env` file:
-   ```bash
-   cp .env.example .env
-   pip install -r requirements.txt
+### Step 2: Set up
+
+```bash
+cp .env.template .env
+```
+
+Open `.env` in any text editor and add your API key. You need at least one:
+
+```env
+# Choose one of these:
+LLM_MODEL=openrouter/nvidia/nemotron-3-super-120b-a12b:free
+# LLM_MODEL=openai/gpt-4o-mini
+# LLM_MODEL=claude-sonnet-4-20250514
+```
+
+Get a free API key at [openrouter.ai](https://openrouter.ai) — it takes 2 minutes.
+
+### Step 3: Install
+
+```bash
+pip install -r requirements.txt
+```
+
+### Step 4: Run
+
+```bash
+./run_all.sh
+```
+
+That's it! FOL is now running.
+
+### What happens when you run
+
+Three servers start:
+- **Port 8420** — the brain (processes your messages)
+- **Port 8421** — the hands (controls apps and browser)
+- **Port 8754** — the API (for the Swift app)
+
+## If you want the Mac app (optional)
+
+```bash
+cd fol-app
+swift build
+swift run
+```
+
+This builds a small app that sits in your MacBook's notch. You can also use the web chat at `http://localhost:3000`.
+
+## How to stop
+
+Press `Ctrl+C` in the terminal where FOL is running.
+
+## Troubleshooting
+
+**"Port already in use"** — something else is using the port. Run:
+```bash
+lsof -ti :8420 | xargs kill
+```
+
+**"Python not found"** — install Python:
+```bash
+brew install python@3.12
+```
+
+**"API key error"** — make sure you put your key in the `.env` file.
+
+## Tests (for developers)
+
+```bash
+python3 -m pytest tests/ -v
+python3 -m pytest fol/tests/ -v
+```
+
+## License
+
+MIT — do whatever you want with it.
+                 

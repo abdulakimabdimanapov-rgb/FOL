@@ -91,7 +91,7 @@
 ├── cookie_sync/                # Cookie syncing
 ├── bridge/                     # Phone bridge
 ├── setup/                      # LaunchAgent setup scripts
-├── tests/                      # Python тесты (430+)
+├── tests/                      # Python тесты (1168+810)
 │
 ├── main.py                     # Identity pipeline CLI
 ├── requirements.txt            # Объединённые Python зависимости

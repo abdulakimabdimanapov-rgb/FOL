@@ -1,17 +1,16 @@
-# FOL v1.0.0 — Release Notes
+# FOL v1.2.0 — Release Notes
 
 > **FOL** — ваш цифровой двойник на MacBook.
 > Notch-панель, голос, зрение, живая память (Obsidian), агентный цикл
 > с авто-выбором инструментов и автопереключением моделей.
 >
-> **v1.0.0** — первый стабильный релиз: v1.0-beta стабилизирована, все
-> проверки чек-листа выполнены, 989+438 тестов, сервисы проверены вживую.
+> **v1.2.0** — Brain-бэкенды (Codebuff/Freebuff), безопасность (race condition, shell injection, memory leak), 1073+ тестов.
 
 ## Системные требования
 
 - **macOS**: 14.0 (Sonoma) или новее
 - **Чип**: Apple Silicon (M1+) — рекомендуется
-- **RAM**: 8GB+ (для локальной модели Ollama)
+- **RAM**: 8GB+
 - **Python**: 3.9+ (рекомендуется 3.11)
 
 ## Что в v1.0.0
@@ -54,8 +53,8 @@
 
 ```bash
 # 1. Склонируйте и настройте
-git clone <repo-url> SecondSelf
-cd SecondSelf
+git clone <repo-url> fol-app
+cd fol-app
 cp .env.template .env      # укажите LLM_MODEL / ключи (см. README)
 pip install -r requirements.txt
 
@@ -75,11 +74,10 @@ pip install -r requirements.txt
 | 8754 | FOL API (JARVIS-команды) |
 | 8000 | Backend API (Docker) |
 | 3000 | Web-чат (Next.js) |
-| 11434 | Ollama (локальный AI, опционально) |
+| ~~11434~~ | ~~Ollama~~ — удалён политикой, порт не используется |
 
 ## Известные ограничения
 
 - Голос/браузер/почта требуют живого окружения (mic, Chrome, Google OAuth) — см. чек-лист
-- Для Ollama требуется ~2GB RAM на модель `llama3.2:3b`
 - Unsigned .app требует `xattr -cr` при первом запуске
 - Абсолютные пути в репозитории удалены — скрипты теперь резолвят корень проекта сами
