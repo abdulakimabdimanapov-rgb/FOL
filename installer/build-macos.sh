@@ -105,7 +105,7 @@ echo "  ✅ .app bundle ready: $(du -sh "$APP_DIR" | cut -f1)"
 
 # ─── Step 3: Bundle Python backend ─────────────────
 echo "[3/5] Bundling Python backend..."
-BACKEND_DIR="$BUILD_DIR/backend"
+BACKEND_DIR="$APP_DIR/Contents/Resources/backend"
 rm -rf "$BACKEND_DIR"
 mkdir -p "$BACKEND_DIR"
 
@@ -120,7 +120,7 @@ for f in main.py VERSION requirements.txt requirements-core.txt run_all.sh .env.
     [ -f "$f" ] && cp "$f" "$BACKEND_DIR/"
 done
 
-echo "  ✅ Backend bundled: $(du -sh "$BACKEND_DIR" | cut -f1)"
+echo "  ✅ Backend bundled inside .app: $(du -sh "$BACKEND_DIR" | cut -f1)"
 
 # ─── Step 4: Create DMG ────────────────────────────
 echo "[4/5] Creating DMG..."
