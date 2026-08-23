@@ -60,15 +60,26 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // Clear agent browser session for a fresh start
         clearAgentBrowser()
 
-        // LOCAL MODE: Start backend services — each one only if its port is free.
-        statusLog("Local mode: starting orchestrator...")
-        launchPython(script: "orchestrator/server.py", label: "Orchestrator", port: 8420)
+        // LOCAL MODE: Install Python deps on first launch, then start services.
+        Task {
+            await FirstLaunchInstaller.installIfNeeded(
+                repoRoot: repoRoot!,
+                pythonPath: pythonPath ?? "/usr/bin/python3"
+            )
+            await MainActor.run {
+                statusLog("Python dependencies ready")
 
-        statusLog("Starting agent server...")
-        launchPython(script: "agent-server/server.py", label: "Agent Server", port: 8421)
+                // Start backend services — each one only if its port is free.
+                statusLog("Local mode: starting orchestrator...")
+                launchPython(script: "orchestrator/server.py", label: "Orchestrator", port: 8420)
 
-        statusLog("Starting FOL server...")
-        launchPython(script: "fol/run_api_server.py", label: "FOL Server", port: 8754)
+                statusLog("Starting agent server...")
+                launchPython(script: "agent-server/server.py", label: "Agent Server", port: 8421)
+
+                statusLog("Starting FOL server...")
+                launchPython(script: "fol/run_api_server.py", label: "FOL Server", port: 8754)
+            }
+        }
 
         // Always create the notch — it shows chat (no sign-in required)
         Task { @MainActor in
@@ -359,11 +370,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // Check well-known locations for the repo, then walk up from binary
         let fm = FileManager.default
         let home = NSHomeDirectory()
-        let knownPaths: [String] = [
+        var knownPaths: [String] = [
             "\(home)/second-self",
             "\(home)/Desktop/Fol",              // Xcode / swift run from repo
             "/usr/local/share/second-self",
         ]
+
+        // Also check inside the .app bundle (DMG install: backend bundled in Resources)
+        if let bundlePath = Bundle.main.resourcePath {
+            let bundledBackend = bundlePath + "/backend"
+            if fm.fileExists(atPath: bundledBackend + "/orchestrator/server.py") {
+                knownPaths.insert(bundledBackend, at: 0)
+            }
+        }
 
         var root: URL?
         for path in knownPaths {
