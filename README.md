@@ -335,4 +335,3 @@ MIT — see [LICENSE](LICENSE).
 *FOL — Future of Life. Your smart helper that never sleeps.*
 
 *FOL — Будущее Жизни. Умный помощник, который никогда не спит.*
- т     stealth/ox-alpha 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     
