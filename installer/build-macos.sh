@@ -51,7 +51,10 @@ if [ -n "$BINARY" ] && [ -f "$BINARY" ]; then
     chmod +x "$APP_DIR/Contents/MacOS/$APP_NAME"
 fi
 
-# Info.plist
+# Info.plist — use project's Info.plist
+if [ -f "$PROJECT_ROOT/fol-app/Info.plist" ]; then
+    cp "$PROJECT_ROOT/fol-app/Info.plist" "$APP_DIR/Contents/Info.plist"
+else
 cat > "$APP_DIR/Contents/Info.plist" << PLIST
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"
@@ -72,6 +75,7 @@ cat > "$APP_DIR/Contents/Info.plist" << PLIST
 </dict>
 </plist>
 PLIST
+fi
 echo -n 'APPL????' > "$APP_DIR/Contents/PkgInfo"
 
 # Icon
@@ -79,6 +83,12 @@ ICON_DIR="fol-app/Assets.xcassets/AppIcon.appiconset"
 if [ -d "$ICON_DIR" ]; then
     ICON=$(find "$ICON_DIR" -name '*.png' | head -1)
     [ -n "$ICON" ] && cp "$ICON" "$APP_DIR/Contents/Resources/AppIcon.png"
+fi
+
+# Resource bundle (twin pose images, etc.)
+BUNDLE=$(find -L fol-app/.build/release -name 'FOL_FOL.bundle' 2>/dev/null | head -1)
+if [ -n "$BUNDLE" ] && [ -d "$BUNDLE" ]; then
+    cp -R "$BUNDLE" "$APP_DIR/Contents/Resources/FOL_FOL.bundle"
 fi
 
 # Sign
@@ -131,6 +141,7 @@ ln -s /Applications "$DMG_TEMP/Applications"
 hdiutil create -volname "$APP_NAME" \
     -srcfolder "$DMG_TEMP" \
     -ov -format UDZO \
+    -imagekey zlib-level=9 \
     "$DMG_FILE"
 
 # Cleanup
