@@ -128,3 +128,7 @@ test-mjpeg.py
 
 # === Other dev docs ===
 STARDANCE.md
+
+# Build artifacts
+_build/
+build/
