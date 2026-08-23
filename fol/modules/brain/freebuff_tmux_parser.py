@@ -83,6 +83,17 @@ _TUI_STATUS_PREFIXES = (
     "🔄", "⏳", "✓", "✗", "✘", "✅", "❌",
 )
 
+# Patterns that indicate Freebuff is idle / waiting for input
+_IDLE_PATTERNS = (
+    ">",                    # generic prompt
+    "❯",                    # fancy prompt
+    "▶",                    # arrow prompt
+    ">>",                   # double prompt
+    "Ready",                # ready state
+    "Type your message",   # instruction
+    "Ask me anything",     # instruction
+)
+
 # Freebuff-specific TUI chrome (exact-match lines to remove)
 _FREEBUFF_CHROME = frozenset((
     "❯", ">", "▶", ">>", ":", "$", "#", "✕",

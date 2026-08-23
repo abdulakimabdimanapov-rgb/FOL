@@ -171,11 +171,7 @@ class TestTmuxSession:
         from modules.brain.freebuff_tmux_session import FreebuffTmuxSession, TmuxConfig
         config = TmuxConfig(session_name="test", binary="freebuff")
         session = FreebuffTmuxSession(config)
-        loop = asyncio.new_event_loop()
-        try:
-            result = loop.run_until_complete(session.check_or_create())
-        finally:
-            loop.close()
+        result = asyncio.run(session.check_or_create())
         assert result is True
         assert session._info.owned_process is True
 
@@ -185,11 +181,7 @@ class TestTmuxSession:
         from modules.brain.freebuff_tmux_session import FreebuffTmuxSession, TmuxConfig
         config = TmuxConfig(session_name="test", binary="freebuff")
         session = FreebuffTmuxSession(config)
-        loop = asyncio.new_event_loop()
-        try:
-            result = loop.run_until_complete(session.check_or_create())
-        finally:
-            loop.close()
+        result = asyncio.run(session.check_or_create())
         assert result is True
         assert session._info.owned_process is False
 
@@ -202,11 +194,7 @@ class TestTmuxSession:
         session._previous_capture = "old capture"
 
         with patch("modules.brain.freebuff_tmux_session.detect_response_complete", return_value=True):
-            loop = asyncio.new_event_loop()
-            try:
-                response = loop.run_until_complete(session.read_response(timeout=2))
-            finally:
-                loop.close()
+            response = asyncio.run(session.read_response(timeout=2))
             assert "Response text" in response
 
     @patch("modules.brain.freebuff_tmux_session.session_exists", return_value=True)
@@ -216,11 +204,7 @@ class TestTmuxSession:
         config = TmuxConfig(session_name="test")
         session = FreebuffTmuxSession(config)
         session._info.owned_process = True
-        loop = asyncio.new_event_loop()
-        try:
-            loop.run_until_complete(session.close())
-        finally:
-            loop.close()
+        asyncio.run(session.close())
         mock_kill.assert_called_once_with("test")
 
     @patch("modules.brain.freebuff_tmux_session.session_exists", return_value=True)
@@ -230,11 +214,7 @@ class TestTmuxSession:
         config = TmuxConfig(session_name="test")
         session = FreebuffTmuxSession(config)
         session._info.owned_process = False
-        loop = asyncio.new_event_loop()
-        try:
-            loop.run_until_complete(session.close())
-        finally:
-            loop.close()
+        asyncio.run(session.close())
         mock_kill.assert_not_called()
 
     def test_status(self):
@@ -391,11 +371,7 @@ class TestTmuxBridgeIntegration:
         session.send_message = AsyncMock(return_value=True)
         session.read_response = AsyncMock(return_value="Response from Freebuff")
 
-        loop = asyncio.new_event_loop()
-        try:
-            result = loop.run_until_complete(bridge._send_and_receive("user message"))
-        finally:
-            loop.close()
+        result = asyncio.run(bridge._send_and_receive("user message"))
         assert result == "Response from Freebuff"
 
     def test_chat_calls_send_and_receive(self):
@@ -416,13 +392,9 @@ class TestTmuxBridgeIntegration:
         bridge = FreebuffTmuxBridge()
         bridge._send_and_receive = AsyncMock(return_value="Async response")
 
-        loop = asyncio.new_event_loop()
-        try:
-            result = loop.run_until_complete(bridge.acomplete(
-                [{"role": "user", "content": "Hello"}],
-            ))
-        finally:
-            loop.close()
+        result = asyncio.run(bridge.acomplete(
+            [{"role": "user", "content": "Hello"}],
+        ))
         assert result["content"] == "Async response"
         assert result["tool_calls"] == []
         assert result["stop_reason"] == "end_turn"
@@ -435,11 +407,7 @@ class TestTmuxBridgeIntegration:
         bridge._session = mock_session
         bridge._initialized = True
 
-        loop = asyncio.new_event_loop()
-        try:
-            loop.run_until_complete(bridge.cleanup())
-        finally:
-            loop.close()
+        asyncio.run(bridge.cleanup())
         mock_session.close.assert_called_once()
         assert bridge._initialized is False
 

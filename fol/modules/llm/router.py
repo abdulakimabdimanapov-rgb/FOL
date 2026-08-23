@@ -214,30 +214,21 @@ def _read_timeout() -> float | None:
         return None
 
 
-# OpenRouter key rotation — shared with analyze/_llm.py
-_openrouter_key_index: int = 0
-_openrouter_rotation_reset: float = 0
+# OpenRouter key rotation — delegated to centralized key pool
+from modules.llm.key_pool import get_key_pool as _get_key_pool
 
 
 def _get_openrouter_key() -> str:
-    """Return the current OpenRouter API key with rotation support."""
-    global _openrouter_key_index, _openrouter_rotation_reset
-    import time as _time
-    now = _time.time()
-    if _openrouter_key_index > 0 and now > _openrouter_rotation_reset:
-        _openrouter_key_index = 0
-    if _openrouter_key_index == 0:
-        return os.environ.get("OPENROUTER_API_KEY", "") or ""
-    return os.environ.get("OPENROUTER_API_KEY_2", "") or os.environ.get("OPENROUTER_API_KEY", "") or ""
+    """Return the current OpenRouter API key via the centralized pool."""
+    return _get_key_pool().get_key()
 
 
 def rotate_in_openrouter_key() -> None:
-    """Switch to the next OpenRouter API key (called on rate limit)."""
-    global _openrouter_key_index, _openrouter_rotation_reset
-    import time as _time
-    if os.environ.get("OPENROUTER_API_KEY_2", "") and _openrouter_key_index == 0:
-        _openrouter_key_index = 1
-        _openrouter_rotation_reset = _time.time() + 300
+    """Switch to the next OpenRouter API key via the centralized pool."""
+    pool = _get_key_pool()
+    current = pool.get_key()
+    pool.mark_rate_limited(current)
+    logger.warning("OpenRouter: rate limited — rotated to next key (pool=%d keys)", pool.pool_size)
 
 
 def api_key_for_model(model: str) -> str | None:

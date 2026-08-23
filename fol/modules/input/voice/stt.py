@@ -14,12 +14,13 @@ import os
 from typing import Any
 
 from modules.input.voice.interface import STTProvider
-from modules.input.voice.providers import ElevenLabsSTT, MLXWhisperSTT
+from modules.input.voice.providers import ElevenLabsSTT, GroqWhisperSTT, MLXWhisperSTT
 
 logger = logging.getLogger(__name__)
 
 LOCAL = "mlx_whisper"
 CLOUD = "elevenlabs"
+GROQ = "groq_whisper"
 
 
 def get_stt(provider: str | None = None) -> STTProvider:
@@ -30,6 +31,13 @@ def get_stt(provider: str | None = None) -> STTProvider:
     missing (they are opt-in enhancements, never a requirement).
     """
     cfg = (provider or os.environ.get("FOL_STT_PROVIDER", "") or LOCAL).strip().lower()
+
+    if cfg in ("groq", "groq_whisper", "whisper_api"):
+        groq = GroqWhisperSTT()
+        if groq.is_available:
+            return groq
+        logger.info("Groq Whisper STT requested but no GROQ_API_KEY — using local mlx-whisper")
+        return MLXWhisperSTT()
 
     if cfg in ("elevenlabs", "cloud", "scribe"):
         cloud = ElevenLabsSTT()
@@ -48,6 +56,8 @@ def get_stt(provider: str | None = None) -> STTProvider:
 def available_providers() -> list[str]:
     """Providers that could be used (order = fallback chain)."""
     providers = [LOCAL]
+    if GroqWhisperSTT().is_available:
+        providers.append(GROQ)
     if ElevenLabsSTT().is_available:
         providers.append(CLOUD)
     return providers

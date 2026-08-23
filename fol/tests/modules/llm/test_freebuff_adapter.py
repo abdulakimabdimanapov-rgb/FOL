@@ -162,17 +162,20 @@ class TestSelectionInvariant:
         brain = get_brain("freebuff")
         assert isinstance(brain, BrainRouter)
 
-    def test_freebuff_selection_fails_without_key(self, monkeypatch):
-        """Explicit Freebuff fails when OPENROUTER_API_KEY is missing."""
+    def test_freebuff_falls_back_without_key(self, monkeypatch):
+        """Explicit Freebuff falls back to current when OPENROUTER_API_KEY is missing."""
         monkeypatch.delenv("OPENROUTER_API_KEY", raising=False)
         monkeypatch.setenv("FOL_BRAIN", "current")
-        with pytest.raises(BrainConfigurationError):
-            get_brain("freebuff")
+        brain = get_brain("freebuff")
+        # Should gracefully fall back, not raise
+        from modules.llm.brain import CurrentLLMAdapter
+        assert isinstance(brain, CurrentLLMAdapter)
 
-    def test_freebuff_env_fails_without_key(self, monkeypatch):
-        """FOL_BRAIN=freebuff fails when OPENROUTER_API_KEY is missing."""
+    def test_freebuff_env_falls_back_without_key(self, monkeypatch):
+        """FOL_BRAIN=freebuff falls back to current when OPENROUTER_API_KEY is missing."""
         monkeypatch.delenv("OPENROUTER_API_KEY", raising=False)
         monkeypatch.setenv("FOL_BRAIN", "freebuff")
-        with pytest.raises(BrainConfigurationError):
-            get_brain()
+        brain = get_brain()
+        from modules.llm.brain import CurrentLLMAdapter
+        assert isinstance(brain, CurrentLLMAdapter)
         assert os.environ.get("FOL_BRAIN") == "freebuff"  # env untouched

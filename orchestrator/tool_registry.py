@@ -73,6 +73,20 @@ MEMORY_TOOL_NAMES = {t["name"] for t in MEMORY_TOOLS}
 # Browser tool names that trigger the cookie sync prompt (navigation-related).
 BROWSER_NAV_TOOLS = {"browser_goto"}
 
+# ---------------------------------------------------------------------------
+# Tool name sets — single source of truth for activity labels + tool categories
+# ---------------------------------------------------------------------------
+# These sets were previously duplicated in server.py and response_formatter.py.
+# Now they live here, derived from the canonical registry where possible, and
+# imported by both modules.
+
+EMAIL_TOOLS = {"send_email", "draft_email", "reply_to_email", "read_emails",
+               "get_contact_info", "summarize_emails"}
+CALENDAR_TOOLS = {"create_event", "update_event", "delete_event", "list_events"}
+DOC_TOOLS = {"create_document", "create_presentation", "share_document"}
+SAFARI_TOOLS = {"safari_goto", "safari_js", "safari_get_url", "safari_get_text"}
+MESSAGING_TOOLS = {"send_telegram", "send_whatsapp"}
+
 
 def anthropic_tools(names: set[str]) -> list[dict[str, Any]]:
     """Anthropic-format dicts for an explicit set of tool names (from registry)."""
@@ -102,6 +116,11 @@ __all__ = [
     "MEMORY_TOOL_NAMES",
     "FOL_TOOLS",
     "BROWSER_NAV_TOOLS",
+    "EMAIL_TOOLS",
+    "CALENDAR_TOOLS",
+    "DOC_TOOLS",
+    "SAFARI_TOOLS",
+    "MESSAGING_TOOLS",
     "anthropic_tools",
     "risk_of",
     "requires_confirmation",

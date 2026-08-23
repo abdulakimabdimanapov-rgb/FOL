@@ -37,11 +37,14 @@ unchanged.
 from __future__ import annotations
 
 import abc
+import logging
 import os
 from typing import Any, AsyncIterator
 
 from modules.llm.freebuff import FREEBUFF_REQUIREMENTS, freebuff_config, codebuff_config
 from modules.llm.router import LLMRouter, get_llm_router
+
+logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
 # Errors
@@ -518,20 +521,37 @@ def get_brain(name: str | None = None, *, router: LLMRouter | None = None) -> Br
         return CurrentLLMAdapter(router=router)
 
     if cfg in ("freebuff", "freebuff_adapter", "freebuffbrain"):
-        # Freebuff (free service) — uses OpenRouter as the legitimate interface.
-        # Freebuff has no public HTTP API; its models are accessed via OpenRouter.
+        # Freebuff via OpenRouter — models accessed through OpenRouter API.
+        # Uses key pool for automatic rotation across multiple API keys.
         from modules.brain.freebuff_adapter import FreebuffBrainAdapter
+        from modules.llm.brain_router import BrainRouter
 
         adapter = FreebuffBrainAdapter()
-        if not adapter.available:
-            raise BrainConfigurationError(
-                "Freebuff brain unavailable. "
-                "Configure OPENROUTER_API_KEY in your .env file. "
-                "Freebuff models are accessed through OpenRouter."
-            )
-        # Freebuff primary, LiteLLM fallback
+        if adapter.available:
+            # Freebuff primary, LiteLLM fallback
+            return BrainRouter([adapter, CurrentLLMAdapter(router=router)])
+        # Freebuff unavailable — fall back to current brain instead of crashing
+        logger.warning(
+            "Freebuff brain unavailable (no OPENROUTER_API_KEY). "
+            "Falling back to current brain."
+        )
+        return CurrentLLMAdapter(router=router)
+
+    if cfg in ("freebuff_auto", "freebuff-auto", "freebuffautostart"):
+        # Freebuff auto-start — launches Freebuff CLI in background.
+        # Falls back to current LLM on failure.
+        from modules.brain.freebuff_autostart import FreebuffAutoStartBridge
         from modules.llm.brain_router import BrainRouter
-        return BrainRouter([adapter, CurrentLLMAdapter(router=router)])
+
+        bridge = FreebuffAutoStartBridge()
+        if bridge.available:
+            return BrainRouter([bridge, CurrentLLMAdapter(router=router)])
+        # Freebuff binary not found — fall back to current brain
+        logger.warning(
+            "Freebuff auto-start unavailable (binary not found). "
+            "Falling back to current brain."
+        )
+        return CurrentLLMAdapter(router=router)
 
     if cfg in ("freebuff_cli", "freebuff-pty", "freebuffpty"):
         # Freebuff CLI via PTY — DEPRECATED: TUI parsing is fundamentally
@@ -598,8 +618,10 @@ def get_brain(name: str | None = None, *, router: LLMRouter | None = None) -> Br
         return BrainRouter([codebuff, CurrentLLMAdapter(router=router)])
 
     raise BrainConfigurationError(
-        f"Unknown FOL_BRAIN={cfg!r}. Valid values: 'current' (default), "
-        f"'freebuff' (Freebuff via OpenRouter), 'freebuff_tmux' (Freebuff CLI via tmux), "
+        f"Unknown FOL_BRAIN={cfg!r}. Valid values: "
+        f"'current' (default), 'freebuff' (Freebuff via OpenRouter), "
+        f"'freebuff_auto' (Freebuff CLI auto-start + fallback), "
+        f"'freebuff_tmux' (Freebuff CLI via tmux), "
         f"'freebuff_cli' (deprecated PTY), 'codebuff' (Codebuff SDK, paid)."
     )
 

@@ -1,0 +1,81 @@
+# ============================================
+# FOL — Python Project Configuration
+# ============================================
+
+[project]
+name = "fol"
+version = "1.3.0"
+description = "Personal AI Assistant for macOS — digital twin that lives in your notch"
+readme = "README.md"
+license = {text = "MIT"}
+requires-python = ">=3.10"
+authors = [
+    {name = "abdulakimabdimanapov-rgb"}
+]
+keywords = ["ai", "assistant", "macos", "llm", "voice", "automation"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: End Users/Desktop",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: MacOS",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+]
+
+[project.urls]
+Homepage = "https://github.com/abdulakimabdimanapov-rgb/SecondSelf"
+Repository = "https://github.com/abdulakimabdimanapov-rgb/SecondSelf"
+Issues = "https://github.com/abdulakimabdimanapov-rgb/SecondSelf/issues"
+Changelog = "https://github.com/abdulakimabdimanapov-rgb/SecondSelf/blob/main/CHANGELOG.md"
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.0.0",
+    "pytest-xdist>=3.6.0",
+    "pytest-asyncio",
+    "httpx",
+    "hypothesis>=6.0.0",
+]
+macos = [
+    "mlx>=0.19.0",
+    "mlx-whisper>=0.4.0",
+    "chromadb>=0.5.5",
+    "pyobjc>=10.3.0",
+    "py-applescript==1.0.3",
+]
+all = [
+    "fol[dev,macos]",
+]
+
+[build-system]
+requires = ["setuptools>=68.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+include = ["fol*", "orchestrator*", "analyze*", "auth*", "fetch*", "clean*", "utils*", "context_engine*", "obsidian*"]
+exclude = ["tests*", "fol-app*", "fol/tests*", "benchmark*", "docs*", "scripts*"]
+
+[tool.pytest.ini_options]
+addopts = "-n auto --tb=short -q"
+testpaths = ["tests"]
+filterwarnings = [
+    "ignore::FutureWarning:google",
+    "ignore::FutureWarning:grpc",
+]
+
+[tool.ruff]
+line-length = 120
+target-version = "py310"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "UP"]
+ignore = ["E501"]
+
+[tool.mypy]
+python_version = "3.10"
+warn_return_any = true
+warn_unused_configs = true
+ignore_missing_imports = true

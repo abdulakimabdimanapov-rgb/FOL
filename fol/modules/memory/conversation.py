@@ -128,6 +128,27 @@ class ConversationHistory:
         if self._path.exists():
             self._path.unlink()
 
+    def load_recent_sync(self, n: int = 40) -> list[ConversationTurn]:
+        """Load recent turns from disk (synchronous, for startup initialization).
+
+        This lets both the orchestrator and FOL Core see each other's
+        conversation history on startup, even if they run in separate processes.
+        The file is read fresh each time, so recently added turns from the
+        other system are visible.
+        """
+        if not self._path.exists():
+            return []
+        try:
+            lines = self._path.read_text(encoding="utf-8").strip().split("\n")
+            turns = []
+            for line in lines:
+                if line.strip():
+                    turns.append(ConversationTurn.from_dict(json.loads(line)))
+            return turns[-n:]
+        except Exception as exc:
+            logger.debug("Failed to load recent turns sync: %s", exc)
+            return []
+
     @property
     def turn_count(self) -> int:
         return len(self._turns)

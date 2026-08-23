@@ -1,37 +1,83 @@
-# Secrets — never bake API keys into an image
-.env
-.env.local
-.env.*.local
+# ============================================
+# FOL — Docker ignore
+# Exclude files that don't need to be in the container
+# ============================================
 
-# VCS
+# Git
 .git
 .gitignore
-.github
 
-# Node / Next.js
-node_modules
-.next
-public
-src/app
-
-# Python artifacts
+# Python
 __pycache__
 *.pyc
+*.pyo
+*.egg-info
 .pytest_cache
-.hypothesis
 .coverage
-build/
-output/
-fol/.coverage*
+htmlcov/
 
-# macOS build artifacts
-*.wav
+# Node.js
+node_modules
+.next
+package-lock.json
+yarn.lock
+
+# IDE
+.vscode
+.idea
+*.swp
+*.swo
+*~
+
+# macOS
+.DS_Store
 *.pkg
 *.dmg
-*.app
-SecondSelf/.build
-SecondSelf/build
+Release/
 
-# Local data
-*.log
-.DS_Store
+# Logs (will be mounted as volume)
+logs/
+
+# Build artifacts
+dist/
+build/
+*.egg
+
+# Environment (will be mounted as volume)
+.env
+.env.local
+.env.production
+
+# Tests (not needed in production)
+tests/
+fol/tests/
+scripts/
+docs/
+
+# Swift app (macOS only, not needed in Docker)
+fol-app/
+fol/ui/
+
+# Audio files
+*.wav
+*.mp3
+*.ogg
+
+# Temp files
+tmp/
+temp/
+*.tmp
+
+# WakaTime
+.wakatime-project
+
+# Release notes
+RELEASE_NOTES.md
+CHANGELOG.md
+CONTRIBUTING.md
+AUDIT_REPORT.md
+DEVLOG*.md
+STARDANCE.md
+ROADMAP.md
+FOL_UPGRADE.md
+DESIGN.md

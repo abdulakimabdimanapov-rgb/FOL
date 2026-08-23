@@ -53,7 +53,7 @@
 
 ```bash
 # 1. Склонируйте и настройте
-git clone <repo-url> fol-app
+git clone https://github.com/abdulakimabdimanapov-rgb/SecondSelf.git fol-app
 cd fol-app
 cp .env.template .env      # укажите LLM_MODEL / ключи (см. README)
 pip install -r requirements.txt

@@ -5,6 +5,33 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.3.0] — 2026-08-20
+
+### Added
+
+**API Key Pool — автоматическая ротация ключей**
+- `fol/modules/llm/key_pool.py` — пул до 99 ключей с автоматическим переключением при rate limit (429)
+- Cooldown 5 минут (настраивается через `OPENROUTER_KEY_COOLDOWN`), после cooldown ключ возвращается в пул
+- Thread-safe, работает в sync и async контекстах
+- Интегрирован во все модули LLM: `analyze/_llm.py`, `analyze/_llm_async.py`, `fol/modules/llm/router.py`
+- Ключи: `OPENROUTER_API_KEY`, `_KEY_2`, `_KEY_3`, ...`_KEY_99`
+
+**Freebuff Auto-Start Bridge**
+- `fol/modules/brain/freebuff_autostart.py` — Freebuff CLI запускается в фоне когда FOL стартует
+- Используется как основной brain с fallback на текущий LLM
+- Автоперезапуск при падении (до 2 попыток)
+- Плавный fallback вместо краша при недоступности
+
+### Changed
+
+- `fol/modules/llm/brain.py` — `get_brain()` теперь поддерживает `freebuff_auto` + BrainRouter fallback
+- `.env.example` / `.env.template` — добавлены настройки key pool и Freebuff auto-start
+- README переписан на простом английском (A2-B1 уровень)
+
+### Removed
+
+- Старые .pkg файлы v1.2.0 удалены из `build/` и `Release/`
+
 ## [1.2.0] — 2026-08-18
 
 ### Added
@@ -201,6 +228,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+[1.3.0]: https://github.com/abdulakimabdimanapov-rgb/SecondSelf/releases/tag/v1.3.0
+[1.2.0]: https://github.com/abdulakimabdimanapov-rgb/SecondSelf/releases/tag/v1.2.0
 [1.0.0-beta]: https://github.com/abdulakimabdimanapov-rgb/SecondSelf/releases/tag/v1.0-beta
 [0.4.0]: https://github.com/abdulakimabdimanapov-rgb/SecondSelf/releases/tag/v0.4.0
 [0.3.0]: https://github.com/abdulakimabdimanapov-rgb/SecondSelf/releases/tag/v0.3.0

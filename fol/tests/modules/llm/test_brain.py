@@ -322,12 +322,13 @@ class TestGetBrain:
         assert isinstance(get_brain("current"), CurrentLLMAdapter)
         assert isinstance(get_brain("litellm"), CurrentLLMAdapter)
 
-    def test_freebuff_fails_without_key(self, monkeypatch):
-        """get_brain('freebuff') raises when OPENROUTER_API_KEY is missing."""
+    def test_freebuff_falls_back_without_key(self, monkeypatch):
+        """get_brain('freebuff') falls back to current when OPENROUTER_API_KEY is missing."""
         monkeypatch.delenv("OPENROUTER_API_KEY", raising=False)
         monkeypatch.setenv("FOL_BRAIN", "current")
-        with pytest.raises(BrainConfigurationError):
-            get_brain("freebuff")
+        brain = get_brain("freebuff")
+        # Should gracefully fall back to CurrentLLMAdapter, not raise
+        assert isinstance(brain, CurrentLLMAdapter)
 
     def test_freebuff_succeeds_with_key(self, monkeypatch):
         """get_brain('freebuff') returns BrainRouter when OPENROUTER is configured."""
@@ -337,12 +338,13 @@ class TestGetBrain:
         brain = get_brain("freebuff")
         assert isinstance(brain, BrainRouter)
 
-    def test_freebuff_env_fails_without_key(self, monkeypatch):
-        """FOL_BRAIN=freebuff raises when OPENROUTER_API_KEY is missing."""
+    def test_freebuff_env_falls_back_without_key(self, monkeypatch):
+        """FOL_BRAIN=freebuff falls back to current when OPENROUTER_API_KEY is missing."""
         monkeypatch.delenv("OPENROUTER_API_KEY", raising=False)
         monkeypatch.setenv("FOL_BRAIN", "freebuff")
-        with pytest.raises(BrainConfigurationError):
-            get_brain()
+        brain = get_brain()
+        # Should gracefully fall back to CurrentLLMAdapter, not raise
+        assert isinstance(brain, CurrentLLMAdapter)
 
     def test_freebuff_env_succeeds_with_key(self, monkeypatch):
         """FOL_BRAIN=freebuff returns BrainRouter when OPENROUTER is configured."""
@@ -356,11 +358,11 @@ class TestGetBrain:
         with pytest.raises(BrainConfigurationError, match="Unknown FOL_BRAIN"):
             get_brain("banana-brain")
 
-    def test_no_silent_fallback_from_freebuff(self, monkeypatch):
-        # When OPENROUTER is not configured, explicit Freebuff must raise
-        # BrainConfigurationError, not silently become another brain.
+    def test_freebuff_graceful_fallback(self, monkeypatch):
+        # When OPENROUTER is not configured, Freebuff brain gracefully falls
+        # back to CurrentLLMAdapter instead of crashing.
         monkeypatch.delenv("OPENROUTER_API_KEY", raising=False)
         monkeypatch.setenv("FOL_BRAIN", "freebuff")
-        with pytest.raises(BrainConfigurationError):
-            get_brain()
+        brain = get_brain()
+        assert isinstance(brain, CurrentLLMAdapter)
         assert os.environ.get("FOL_BRAIN") == "freebuff"  # env untouched

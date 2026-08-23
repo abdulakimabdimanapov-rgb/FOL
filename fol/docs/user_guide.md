@@ -4,8 +4,8 @@
 
 ```bash
 # Clone the repository
-git clone <repo-url>
-cd FOL/fol
+git clone https://github.com/abdulakimabdimanapov-rgb/SecondSelf.git SecondSelf
+cd SecondSelf/fol
 
 # Install dependencies
 pip install -e ".[dev]"

@@ -1,181 +1,337 @@
-# FOL — Personal AI Assistant for macOS
+# FOL — Your Smart Helper for Mac
 
-> **v1.2.0** — Production-ready release: **1073+ tests passing**, brain backends (Codebuff/Freebuff), security hardening (race condition, shell injection, memory leak fixes).
+> **v1.3.0** — Free AI brain, key rotation, bilingual (Русский + English), Obsidian memory, 1073+ tests.
 
-FOL is a **digital twin**: an AI assistant that lives in your MacBook's notch, understands screen context, remembers you, and performs actions on your computer.
+**FOL** is a smart assistant that lives on your MacBook. It helps you with your computer. It can open apps, find files, talk to you, and remember things.
 
-**The problem FOL solves:** everyday computer work is full of repetitive actions, re-explaining context, and constant app-switching — that's "friction" stealing your time.
-
-**Solution — three pillars:**
-
-| Pillar | What it does |
-|---|---|
-| **1. Desktop automation** | FOL opens apps, searches the browser, works with files and clicks — you stop wasting time on repetitive macOS tasks |
-| **2. Context + Memory** | FOL remembers context and preferences — no need to explain the same thing over and over |
-| **3. Proactive assistance** | FOL notices useful context on its own and suggests actions without waiting for a command |
+You can talk to it in **Russian** or **English**.
 
 ---
 
-## Quick Start
+## What Can FOL Do? / Что умеет FOL?
 
-```bash
-# 1. Set up .env (see .env.template — keys are empty, safe to share)
-cp .env.template .env
+| Feature | What It Does | На русском |
+|---------|-------------|------------|
+| **Chat** | Talk to FOL. Get answers in real time. | Чат с ИИ |
+| **Voice** | Press the microphone, speak. FOL writes what you say. | Голосовой ввод |
+| **Screen** | FOL sees your screen. It can take screenshots. | Видит экран |
+| **Apps** | FOL opens apps, clicks, types for you. | Управление приложениями |
+| **Browser** | FOL goes to websites, clicks links, scrolls pages. | Управление браузером |
+| **Memory** | FOL remembers your name, preferences, talks. | Память |
+| **Agents** | 5 special helpers: Architect, Coder, Reviewer, Researcher, Memory. | Агенты |
+| **Safety** | Dangerous actions need your permission. | Безопасность |
+| **Two Languages** | Works in Russian and English. Even mixed! | Два языка |
+| **Typo Fix** | If you make a mistake in typing, FOL still understands. | Исправление опечаток |
 
-# 2. Install dependencies
-pip install -r requirements.txt
+---
 
-# 3. Start all services
-./run_all.sh
+## How Does It Work? / Как это работает?
 
-# 4. Verify
-curl http://localhost:8420/status     # Orchestrator
-curl http://localhost:8421/health     # Agent Server (desktop control)
-curl http://localhost:8754/health     # FOL API (JARVIS commands)
+FOL has **3 parts**:
+
+```
+You → Talk to FOL → FOL thinks → FOL does things on your computer
 ```
 
-Start individually: `./run_all.sh orchestrator | agent | fol | swift | web`.
+### 1. API Server (port 8754)
+This is the main part. It receives your messages and sends answers.
 
-### Policy: FOL Does NOT Use Local LLMs
+### 2. Orchestrator (port 8420)
+This is the "brain". It talks to the AI model (like ChatGPT) and decides what to do.
 
-> **We deliberately chose against local AI (Ollama, MLX inference, local model files, local fallback providers).** FOL doesn't run models on your hardware, doesn't heat up your Mac, and doesn't eat its memory — all reasoning happens through cloud APIs (Freebuff / OpenRouter / OpenAI / Anthropic). Only local STT (mlx-whisper) stays for speech recognition — that's not an LLM.
+### 3. Agent Server (port 8421)
+This part controls your computer. It opens apps, clicks, takes screenshots.
 
-### LLM — One Line in `.env` (API Providers Only)
+### Ports (порты)
+
+| Port | What | На русском |
+|------|------|------------|
+| 8420 | Brain (AI server) | Мозг |
+| 8421 | Desktop control | Управление компьютером |
+| 8754 | Main API, chat | Основной API, чат |
+| 3000 | Web chat (optional) | Веб-чат (опционально) |
+
+---
+
+## AI Brain / ИИ Мозг
+
+FOL uses AI from the cloud (internet). It does NOT use your computer's memory or battery for AI.
+
+### How to Choose a Brain / Как выбрать мозг
+
+In the file `.env`, set `FOL_BRAIN`:
+
+| `FOL_BRAIN` | What | На русском |
+|-------------|------|------------|
+| `current` | **Default.** Uses OpenRouter API. Free models available. | По умолчанию. Через API. |
+| `freebuff` | Starts Freebuff in background. | Запускает Freebuff в фоне |
+| `codebuff` | Paid. Needs `CODEBUFF_API_KEY`. | Платный |
+
+### Free AI Models / Бесплатные модели
+
+Set this in `.env`:
+```
+LLM_MODEL=openrouter/deepseek/deepseek-v4-flash
+```
+This is **free**! Get a key at [openrouter.ai](https://openrouter.ai) — 2 minutes.
+
+### Backup Models / Запасные модели
+
+If the main model is down, FOL tries backup models:
+```
+LLM_FALLBACK_MODELS=openrouter/moonshotai/mimo-2.5,openrouter/nvidia/nemotron-3-super-120b-a12b:free
+```
+
+---
+
+## Install / Установка
+
+### What You Need / Что нужно
+
+- Mac with Apple Silicon (M1, M2, M3, or M4)
+- macOS 14+
+- Python 3.10+ (`brew install python@3.10`)
+- Node.js (optional, for web chat)
+
+### Step 1: Get the Code / Скачать код
+
+```bash
+git clone https://github.com/abdulakimabdimanapov-rgb/SecondSelf.git SecondSelf
+cd SecondSelf
+```
+
+### Step 2: Make Config File / Создать конфиг
+
+```bash
+cp .env.template .env
+```
+
+Open `.env` in any text editor (TextEdit, VS Code, Nano). Add your API key:
 
 ```env
-LLM_MODEL=openrouter/nvidia/nemotron-3-super-120b-a12b:free
-# or LLM_MODEL=openai/gpt-4o-mini, LLM_MODEL=claude-sonnet-4-20250514
-LLM_FALLBACK_MODELS=openrouter/nvidia/nemotron-3-ultra-550b-a55b:free   # fallback chain
-FOL_BRAIN=current        # current = LiteLLMRouter (API-only) | freebuff = Freebuff Brain
+# Free (use this!):
+LLM_MODEL=openrouter/deepseek/deepseek-v4-flash
+OPENROUTER_API_KEY=your-key-here
+
+# Or paid:
+# LLM_MODEL=openai/gpt-4o-mini
 ```
 
-If the primary model is unavailable (quota/outage), the assistant automatically tries models from `LLM_FALLBACK_MODELS` in order — the system works as long as at least one model is reachable. Local models (`ollama/…`, MLX) are automatically excluded from the chain (re-enable only with explicit `FOL_ENABLE_LOCAL_LLM=1` — not recommended).
+Get a free key: [openrouter.ai](https://openrouter.ai) (2 minutes).
 
----
-
-## Demo Scenarios (Verified End-to-End)
+### Step 3: Install Packages / Установить пакеты
 
 ```bash
-./scripts/demo.sh                  # 5 scenarios with pauses for recording
-DEMO_QUICK=1 ./scripts/demo.sh     # no pauses (quick check)
-./scripts/verify_scenarios.sh      # auto-verify scenarios
-python3 scripts/e2e_check.py       # E2E: services + health + MJPEG + SSE
+pip install -r requirements.txt
 ```
 
-| Scenario | How it works |
-|---|---|
-| "Open Safari and find OpenAI news" | Opens Safari → searches → summary |
-| "Write a letter to the professor" | Contact / Google OAuth |
-| "Create a calendar event" | `create_event` via Google Calendar |
-| "Open the FOL project" | Finder + keyboard commands |
-| "Remember to send the report tomorrow" | `save_to_obsidian` → live memory |
-
----
-
-## Architecture
-
-```
-User (Notch UI / Web / Voice)
-      │
-      ▼
-Orchestrator (FastAPI, :8420)
-      │   Router with 6 agents (General/Architect/Coder/Reviewer/Researcher/Memory)
-      │   Two-stage tool selection (category → 5-12 from 50)
-      │   Loop guard (anti-cycling protection)
-      ▼
-LLM (LiteLLM: OpenRouter / OpenAI / Anthropic / …) — model fallback chain
-      │   tool calls
-      ▼
-Execution: Agent Server (:8421, desktop/browser) · Productivity (Gmail/Calendar)
-           · Obsidian (memory) · FOL API (:8754, JARVIS)
-      │
-      ▼
-Result → LLM → final answer (SSE streaming to UI)
-```
-
-Key mechanisms:
-- **ToolRegistry** (`fol/modules/tools/registry.py`) — single registry for all 50 tools: schema, risk, confirmation.
-- **ConfirmationGate** (`fol/modules/tools/gate.py`) — code decides, never the model: dangerous actions are blocked until user confirms; confirmation is bound to the exact call signature.
-- **Two-stage tool selection** — the model sees 5–12 relevant tools, not all 50.
-- **Loop guard** — repeated identical calls N times are interrupted.
-- **Memory** — identity / preferences / episodic + Obsidian vault + daily tracker; context is injected into every LLM request.
-- **Proactive Mode** — `suggestion_engine` (profile/pattern/ambient) + ambient cycle 30s + `proactive on/off` toggle in FOL API.
-- **Security** — `.env` is not tracked by Git, secrets are scrubbed from logs and dashboard, unknown tools are rejected (fail closed).
-
-## Project Structure
-
-```
-fol/                       # Python AI core (JARVIS API :8754)
-  ├── core/ modules/ api/ config/ plugins/ tests/
-orchestrator/              # FastAPI AI server (:8420): agents, tools, memory
-agent-server/              # Desktop/browser control (:8421)
-fol-app/                   # SwiftUI macOS app (Notch UI, voice)
-src/                       # Next.js web interface (SSE chat)
-auth/ fetch/ analyze/ clean/ utils/ context_engine/ obsidian/ dashboard/
-cookie_sync/ bridge/ setup/ scripts/ tests/ docs/
-run_all.sh                 # Unified launcher for all services
-```
-
-## Ports
-
-| Port | Service |
-|------|---------|
-| 8420 | Orchestrator (AI server, SSE) |
-| 8421 | Agent Server (desktop/browser) |
-| 8754 | FOL API (JARVIS commands) |
-| 3000 | Next.js web |
-
----
-
-## Tests
+### Step 4: Start FOL / Запустить FOL
 
 ```bash
-# Run all tests
-python -m pytest tests/ -v          # 1073+ passed (FOL core)
-python3 -m pytest fol/tests/ -v     # Full FOL test suite
+./run_all.sh
+```
 
-# Bilingual router (Russian + English)
+**Done!** FOL is running. Open http://localhost:8754 in your browser.
+
+### Step 5 (Optional): Mac App / Приложение
+
+```bash
+cd fol-app
+swift build
+swift run
+```
+
+This makes a small app in your MacBook's notch.
+
+---
+
+## Config File / Файл настроек
+
+All settings are in `.env`. Copy from `.env.template` first.
+
+### Main Settings / Основные настройки
+
+| Setting | What | Default | На русском |
+|---------|------|---------|------------|
+| `LLM_MODEL` | AI model | `openrouter/deepseek/deepseek-v4-flash` | Модель ИИ |
+| `OPENROUTER_API_KEY` | Your key | — | Ваш ключ |
+| `LLM_MAX_TOKENS` | Answer length | `1500` | Длина ответа |
+| `LLM_TEMPERATURE` | Creativity | `0` | Креативность |
+| `FOL_BRAIN` | Brain mode | `current` | Режим мозга |
+
+### Many Keys / Много ключей
+
+If you have many OpenRouter keys, FOL uses them one by one:
+
+```env
+OPENROUTER_API_KEY=sk-first-key
+OPENROUTER_API_KEY_2=sk-second-key
+OPENROUTER_API_KEY_3=sk-third-key
+# ... up to 99!
+```
+
+When one key is limited (error 429), FOL automatically uses the next key.
+
+### Memory / Память
+
+| Setting | What | На русском |
+|---------|------|------------|
+| `OBSIDIAN_API_KEY` | Obsidian API key | Ключ Obsidian |
+| `OBSIDIAN_VAULT_PATH` | Obsidian folder | Папка Obsidian |
+| `TAVILY_API_KEY` | Web search (optional) | Поиск в интернете |
+
+---
+
+## How to Use / Как пользоваться
+
+### Start / Запуск
+
+```bash
+./run_all.sh          # all services / все сервисы
+./run_all.sh status   # check status / проверить статус
+./run_all.sh stop     # stop / остановить
+```
+
+### Chat / Чат
+
+Open in browser: http://localhost:8754
+
+Or use terminal:
+```bash
+curl -X POST http://localhost:8754/chat \
+  -H "Content-Type: application/json" \
+  -d '{"message": "Hello!"}'
+```
+
+### Voice / Голос
+
+1. Open app: `cd fol-app && swift run`
+2. Click microphone in the notch
+3. Speak!
+
+---
+
+## Project Files / Файлы проекта
+
+```
+SecondSelf/
+├── fol/                # Python AI core (main code)
+│   ├── core/           #   App controller
+│   ├── modules/        #   All modules (LLM, tools, memory, voice)
+│   ├── tests/          #   1073+ tests
+│   └── docs/           #   Documentation
+├── orchestrator/       # AI server (:8420)
+│   ├── server.py       #   Main server
+│   └── agents/         #   5 agents (Architect, Coder, etc.)
+├── agent-server/       # Desktop control (:8421)
+├── fol-app/            # Swift notch app
+├── tests/              # More tests
+├── analyze/            # Analysis
+├── obsidian/           # Obsidian memory
+├── src/                # Web chat (Next.js)
+├── run_all.sh          # Start script
+├── requirements.txt    # Python packages
+└── .env.template       # Config template
+```
+
+---
+
+## Safety / Безопасность
+
+FOL has safety rules. **Dangerous actions need your permission.**
+
+| Risk Level | What | Permission | На русском |
+|------------|------|-----------|------------|
+| 1 — Safe | Read screen, search | No | Безопасно |
+| 2 — Navigation | Open app, focus window | No | Навигация |
+| 3 — GUI | Click, type, hotkeys | Light warning | Управление |
+| 4 — Files | Write file, send email | **Must approve** | Файлы |
+| 5 — Danger | Shell commands, delete | **Must approve** | Опасно |
+
+The AI **cannot** approve its own actions. Only you can.
+
+---
+
+## Tests / Тесты
+
+```bash
+# All tests / Все тесты
+python3 -m pytest tests/ -v
+
+# FOL tests (1073+) / Тесты FOL
+python3 -m pytest fol/tests/ -v
+
+# Russian tests / Русские тесты
 python3 -m pytest tests/test_router.py -v -k "russian"
+
+# Bilingual tests / Двуязычные тесты
 python3 -m pytest tests/test_router.py -v -k "bilingual"
-python3 -m pytest tests/test_router.py -v -k "fuzzy"
 
-# Text normalization
-python3 -m pytest tests/test_normalize.py -v -k "russian"
-
-# Swift build
+# Build Swift app / Собрать приложение
 cd fol-app && swift build
 ```
 
 ---
 
-## Bilingual Routing (Russian + English)
+## Roadmap / Планы
 
-FOL understands both Russian and English commands with a sophisticated routing pipeline:
+### Done / Готово ✅
 
-```
-User input → Greeting detection → Bilingual split → Keyword match → Fuzzy match → History → General
-```
+- Notch panel with 4 states
+- Chat with AI (real time answers)
+- 50+ tools (apps, browser, files)
+- Russian + English (with typo fix)
+- Free AI models (OpenRouter)
+- Backup models (auto switch)
+- Many API keys (auto rotation)
+- Obsidian memory (6 layers)
+- Smart suggestions
+- Screen detection
+- Safety (dangerous actions need approval)
+- Voice input (offline, no API key)
+- 1073+ tests passing
 
-| Agent | EN keywords | RU keywords |
-|-------|------------|-------------|
-| **Architect** | architecture, design pattern, system design, roadmap | архитектур, спроектир, схема, тз |
-| **Reviewer** | review, check, code review, audit, vulnerability | провер, ревью, качеств, аудит |
-| **Coder** | implement, write code, pull request, refactor | напиш, код, создай, баг, тест |
-| **Researcher** | search, find, what is, explain | найд, поищ, ищи, гугл |
-| **Memory** | remember, save, note, obsidian, remind | запомн, сохран, заметк, напомн |
+### In Progress / В работе 🚧
+
+- Freebuff auto-start
+- Better screen understanding
+- Memory 2.0 (facts, preferences, projects)
+
+### Planned / Планы 📋
+
+- Cloud sync (same memory on all devices)
+- Knowledge graph (smart connections)
+- Plugin system (other devs can add features)
+- Visual workflow builder
+- iOS app
+- Text-to-speech (FOL talks back)
+- Personal dashboard
 
 ---
 
-## Security
+## Problems? / Проблемы?
 
-- Unknown tools → fail closed (`GateDecision.REJECT`)
-- Dangerous tools → user confirmation required, bound to exact call signature
-- The model cannot self-approve — code decides
-- Shell-like `fol_command` → always requires confirmation
-- Secrets never reach memory/logs/dashboard; API keys not committed (`.gitignore`)
+| Problem | Solution | Решение |
+|---------|----------|---------|
+| "Port already in use" | `lsof -ti :8420 \| xargs kill` | Убить процесс |
+| "Python not found" | `brew install python@3.10` | Установить Python |
+| "API key error" | Add key to `.env` | Добавить ключ в `.env` |
+| "mlx-whisper not installed" | `pip install mlx-whisper` | Установить для голоса |
+
+---
+
+## Contributing / Вклад
+
+See [CONTRIBUTING.md](CONTRIBUTING.md). Bug fixes and feedback welcome!
 
 ---
 
 ## License
 
 MIT — see [LICENSE](LICENSE).
+
+---
+
+*FOL — Future of Life. Your smart helper that never sleeps.*
+
+*FOL — Будущее Жизни. Умный помощник, который никогда не спит.*

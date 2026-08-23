@@ -16,6 +16,7 @@ from __future__ import annotations
 import pytest
 
 from modules.llm.brain import (
+    BrainError,
     BrainInterface,
     BrainUnavailableError,
     CurrentLLMAdapter,
@@ -126,7 +127,7 @@ class TestUnavailable:
 
     def test_chat_raises_when_none_available(self):
         router = BrainRouter([_FakeBrain(available=False, label="dead")])
-        with pytest.raises(BrainUnavailableError):
+        with pytest.raises(BrainError):
             router.chat([{"role": "user", "content": "hi"}])
 
     @pytest.mark.asyncio

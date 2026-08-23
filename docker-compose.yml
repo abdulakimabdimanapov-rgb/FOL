@@ -1,28 +1,91 @@
-# ────────────────────────────────────────────────────────────────
-# FOL — local compose setup
-#
-#   docker compose up --build
-#
-# Starts the FastAPI web backend on :8000. The orchestrator (:8420)
-# and agent-server (:8421) normally run on the host macOS session
-# (they need a GUI), so they are not containerised by default.
-# ────────────────────────────────────────────────────────────────
+# ============================================
+# FOL — Docker Compose
+# Run all services with one command:
+#   docker compose up -d
+# ============================================
+
 services:
-  api:
-    build: .
-    image: second-self:latest
+  # ─── Orchestrator (main AI server) ───
+  orchestrator:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: runtime
+    container_name: fol-orchestrator
+    command: python3 orchestrator/server.py
     ports:
-      - "8000:8000"
-    # .env may be absent on a fresh checkout — that's fine, the API
-    # starts with default values and reads real keys when present.
-    env_file:
-      - path: .env
-        required: false
+      - "8420:8420"
+    volumes:
+      - ./.env:/app/.env:ro
+      - ./logs:/app/logs
     environment:
-      PORT: "8000"
+      - HOST=0.0.0.0
+      - PORT=8420
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      test: ["CMD", "curl", "-f", "http://localhost:8420/status"]
       interval: 30s
-      timeout: 5s
+      timeout: 10s
       retries: 3
+      start_period: 15s
+
+  # ─── Agent Server (desktop/browser control) ───
+  agent:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: runtime
+    container_name: fol-agent
+    command: python3 agent-server/server.py
+    ports:
+      - "8421:8421"
+    volumes:
+      - ./.env:/app/.env:ro
+      - ./logs:/app/logs
+    environment:
+      - HOST=0.0.0.0
+      - PORT=8421
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8421/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+  # ─── FOL API (JARVIS commands) ───
+  fol-api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: runtime
+    container_name: fol-api
+    command: python3 fol/main.py
+    ports:
+      - "8754:8754"
+    volumes:
+      - ./.env:/app/.env:ro
+      - ./logs:/app/logs
+    environment:
+      - HOST=0.0.0.0
+      - PORT=8754
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8754/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
+
+  # ─── Web UI (Next.js, optional) ───
+  # Uncomment to enable:
+  # web:
+  #   build:
+  #     context: .
+  #     dockerfile: Dockerfile.web
+  #   container_name: fol-web
+  #   ports:
+  #     - "3000:3000"
+  #   volumes:
+  #     - ./.env:/app/.env:ro
+  #   restart: unless-stopped
