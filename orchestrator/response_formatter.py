@@ -272,19 +272,22 @@ def detect_language(text: str) -> str:
 # ---------------------------------------------------------------------------
 # Activity events — coarse, user-safe status (never the raw tool name)
 # ---------------------------------------------------------------------------
-
-_EMAIL_TOOLS = {"send_email", "draft_email", "reply_to_email", "read_emails",
-                "get_contact_info", "summarize_emails"}
-_CALENDAR_TOOLS = {"create_event", "update_event", "delete_event", "list_events"}
-_DOC_TOOLS = {"create_document", "create_presentation", "share_document"}
+# Tool name sets are imported from the single source of truth:
+# orchestrator/tool_registry.py (avoids duplication with server.py).
+from tool_registry import (
+    EMAIL_TOOLS as _EMAIL_TOOLS,
+    CALENDAR_TOOLS as _CALENDAR_TOOLS,
+    DOC_TOOLS as _DOC_TOOLS,
+    SAFARI_TOOLS as _SAFARI_TOOLS,
+    MESSAGING_TOOLS as _MESSAGING_TOOLS,
+)
+# These sets are specific to the formatter (not in the registry):
 _BROWSER_TOOLS = {"browser_goto", "browser_click", "browser_fill", "browser_snapshot",
                   "browser_text", "browser_press"}
 _DESKTOP_TOOLS = {"open_app", "close_app", "click", "type_text", "hotkey", "screenshot",
                   "scroll", "drag", "clipboard_get", "clipboard_set", "notify", "activate_app"}
-_SAFARI_TOOLS = {"safari_goto", "safari_js", "safari_get_url", "safari_get_text"}
 _MEMORY_TOOLS = {"save_to_obsidian", "remember", "log_daily_activity", "log_activity",
                  "get_daily_summary", "learn_from_web", "append_event"}
-_MESSAGING_TOOLS = {"send_telegram", "send_whatsapp"}
 
 
 def activity_for_tool(tool_name: str, language: str = "ru") -> tuple[str, str]:

@@ -1,0 +1,27 @@
+# FOL — Windows Dependencies
+# Core (same as requirements.txt)
+fastapi>=0.100.0
+uvicorn>=0.23.0
+httpx>=0.24.0
+pydantic>=2.0.0
+python-dotenv>=1.0.0
+litellm>=1.0.0
+
+# STT — Groq Whisper (cross-platform, free)
+# mlx-whisper is Apple Silicon only, so Windows uses Groq API
+# Set GROQ_API_KEY in .env and FOL_STT_PROVIDER=groq
+
+# TTS — Windows SAPI (built-in, no extra deps)
+# Or use ElevenLabs (set ELEVENLABS_API_KEY in .env)
+
+# Screen — PowerShell (built-in)
+# Screenshot: System.Windows.Forms
+# Active window: Get-Process
+
+# Notifications — PowerShell toast (built-in)
+
+# Optional: PyAutoGUI for mouse/keyboard control
+# pyautogui>=0.9.54
+
+# Optional: browser automation
+# playwright>=1.40.0

@@ -201,10 +201,12 @@ _TOOL_NAMES_BY_GROUP: dict[str, set[str]] = {
     "fol": {t["name"] for t in FOL_TOOLS},
 }
 
-_EMAIL_TOOLS = {"send_email", "draft_email", "reply_to_email", "read_emails",
-                "get_contact_info", "summarize_emails"}
-_CALENDAR_TOOLS = {"create_event", "update_event", "delete_event", "list_events"}
-_DOC_TOOLS = {"create_document", "create_presentation", "share_document"}
+# Tool name sets — imported from the single source of truth (tool_registry.py)
+from tool_registry import (
+    EMAIL_TOOLS as _EMAIL_TOOLS,
+    CALENDAR_TOOLS as _CALENDAR_TOOLS,
+    DOC_TOOLS as _DOC_TOOLS,
+)
 _WEB_SEARCH = {"search_web"}
 
 _TOOL_CATEGORIES: dict[str, set[str]] = {
@@ -2211,10 +2213,22 @@ async def lifespan(application: FastAPI):
 
     # Load the persistent conversation store at startup so follow-up context
     # survives orchestrator restarts (the store is backed by ~/.fol/conversation_history.jsonl).
+    # Also preload recent turns into the in-memory list so the orchestrator
+    # sees FOL Core's history (unified conversation across both interfaces).
     try:
         await _ensure_conversation_store()
         if _conversation_store is not None:
             print(f"[orchestrator] Conversation history loaded ({_conversation_store.turn_count} turns)")
+            # Preload recent turns from the shared store into in-memory history.
+            # This lets the orchestrator see conversations from FOL Core CLI.
+            if not _conversation_history:
+                try:
+                    recent_turns = _conversation_store.load_recent_sync(MAX_HISTORY_MESSAGES)
+                    if recent_turns:
+                        _conversation_history = _flatten_store_turns_to_messages(recent_turns)
+                        print(f"[orchestrator] Preloaded {len(_conversation_history)} messages from shared history")
+                except Exception as preload_err:
+                    print(f"[orchestrator] Could not preload shared history: {preload_err}")
     except Exception as conv_err:
         print(f"[orchestrator] Conversation history init failed: {conv_err}")
 
@@ -2298,15 +2312,44 @@ async def json_decode_error_handler(request: Request, exc: json.JSONDecodeError)
 
 @app.get("/health")
 async def health():
-    """Health check — also pings the Agent Server with a GET request."""
+    """Health check — pings Agent Server, reports brain backend, and checks services."""
     try:
         agent_status = await asyncio.to_thread(call_agent_server, "/health", None, "GET")
     except Exception as e:
         agent_status = {"status": "error", "error": str(e)}
     obsidian_status = await asyncio.to_thread(check_obsidian_connection)
+
+    # Brain backend status — which brain is active, model chain, key pool
+    brain_info = {"backend": "unknown", "available": False}
+    try:
+        from llm_bridge import _brain as _get_brain
+        brain = _get_brain()
+        if brain is not None:
+            brain_info = {
+                "backend": brain.name,
+                "available": brain.available,
+                "model_chain": brain.model_chain(),
+            }
+    except Exception as exc:
+        brain_info = {"backend": "error", "error": str(exc)}
+
+    # Key pool status
+    key_pool_info = {"pool_size": 0, "available": 0}
+    try:
+        from modules.llm.key_pool import get_key_pool
+        pool = get_key_pool()
+        key_pool_info = {
+            "pool_size": pool.pool_size,
+            "available": pool.available_count,
+        }
+    except Exception:
+        pass
+
     return {
         "status": "ok",
         "agent_server": agent_status,
+        "brain": brain_info,
+        "key_pool": key_pool_info,
         "anthropic_configured": bool(ANTHROPIC_API_KEY),
         "tavily_configured": bool(TAVILY_API_KEY),
         "obsidian_connected": obsidian_status,

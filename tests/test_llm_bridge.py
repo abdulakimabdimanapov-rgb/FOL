@@ -31,6 +31,12 @@ from llm_bridge import (
     fallback_log,
 )
 
+# The .env file may set FOL_BRAIN to a non-default value (e.g. freebuff_tmux).
+# Bridge tests need the canonical "current" brain so get_brain() returns
+# CurrentLLMAdapter.  Patch at module level for the entire file.
+import os
+os.environ["FOL_BRAIN"] = "current"
+
 
 def _run(coro: Any) -> Any:
     """Run an async function/collection to completion."""

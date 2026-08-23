@@ -39,34 +39,24 @@ _DEFAULT_MAX_TOKENS = 4096
 _DEFAULT_MODEL = "claude-sonnet-4-20250514"
 
 # OpenRouter key rotation — when key 1 hits rate limit, switch to key 2
+# OpenRouter key rotation — delegated to centralized key pool
+from modules.llm.key_pool import get_key_pool as _get_key_pool
+
 _openrouter_key_index: int = 0
-_openrouter_rotation_reset: float = 0  # timestamp to reset back to key 1
+_openrouter_rotation_reset: float = 0
 
 
 def _get_openrouter_key() -> str:
-    """Return the current OpenRouter API key with rotation support."""
-    global _openrouter_key_index, _openrouter_rotation_reset
-    import time as _time
-    now = _time.time()
-    if _openrouter_key_index > 0 and now > _openrouter_rotation_reset:
-        _openrouter_key_index = 0
-        logger.info("OpenRouter: rotated back to key 1 (cooldown expired)")
-    if _openrouter_key_index == 0:
-        key = os.environ.get("OPENROUTER_API_KEY", "")
-    else:
-        key = os.environ.get("OPENROUTER_API_KEY_2", "") or os.environ.get("OPENROUTER_API_KEY", "")
-    return key or ""
+    """Return the current OpenRouter API key via the centralized pool."""
+    return _get_key_pool().get_key()
 
 
 def rotate_in_openrouter_key() -> None:
-    """Switch to the next OpenRouter API key (called on rate limit)."""
-    global _openrouter_key_index, _openrouter_rotation_reset
-    import time as _time
-    key2 = os.environ.get("OPENROUTER_API_KEY_2", "")
-    if key2 and _openrouter_key_index == 0:
-        _openrouter_key_index = 1
-        _openrouter_rotation_reset = _time.time() + 300  # reset after 5 min
-        logger.warning("OpenRouter: rate limited on key 1 — rotated to key 2")
+    """Switch to the next OpenRouter API key via the centralized pool."""
+    pool = _get_key_pool()
+    current = pool.get_key()
+    pool.mark_rate_limited(current)
+    logger.warning("OpenRouter: rate limited — rotated to next key (pool=%d keys)", pool.pool_size)
 
 
 # ---------------------------------------------------------------------------

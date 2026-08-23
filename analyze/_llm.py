@@ -48,47 +48,21 @@ _DEFAULT_MODEL = "claude-sonnet-4-20250514"
 # Retry settings
 _MAX_RETRIES = 2
 _RATE_LIMIT_RETRIES = 3
-_RATE_LIMIT_BASE_DELAY = 10  # seconds
+_RATE_LIMIT_BASE_DELAY = 10  # seconds# OpenRouter key rotation — delegated to centralized key pool
+from modules.llm.key_pool import get_key_pool as _get_key_pool
 
-# OpenRouter key rotation — when key 1 hits rate limit, switch to key 2
-_openrouter_key_index: int = 0
-_openrouter_rotation_reset: float = 0  # timestamp to reset back to key 1
-
-
-# ---------------------------------------------------------------------------
-# Configuration
-# ---------------------------------------------------------------------------
 
 def _get_openrouter_key() -> str:
-    """Return the current OpenRouter API key with rotation support.
-
-    When key 1 hits a rate limit, rotate_in_openrouter_key() is called
-    to switch to key 2. After OPENROUTER_ROTATION_COOLDOWN seconds,
-    it automatically resets back to key 1.
-    """
-    global _openrouter_key_index, _openrouter_rotation_reset
-    import time as _time
-    now = _time.time()
-    # Auto-reset after 5 minutes (300s) back to key 1
-    if _openrouter_key_index > 0 and now > _openrouter_rotation_reset:
-        _openrouter_key_index = 0
-        logger.info("OpenRouter: rotated back to key 1 (cooldown expired)")
-    if _openrouter_key_index == 0:
-        key = os.environ.get("OPENROUTER_API_KEY", "")
-    else:
-        key = os.environ.get("OPENROUTER_API_KEY_2", "") or os.environ.get("OPENROUTER_API_KEY", "")
-    return key or ""
+    """Return the current OpenRouter API key via the centralized pool."""
+    return _get_key_pool().get_key()
 
 
 def rotate_in_openrouter_key() -> None:
-    """Switch to the next OpenRouter API key (called on rate limit)."""
-    global _openrouter_key_index, _openrouter_rotation_reset
-    import time as _time
-    key2 = os.environ.get("OPENROUTER_API_KEY_2", "")
-    if key2 and _openrouter_key_index == 0:
-        _openrouter_key_index = 1
-        _openrouter_rotation_reset = _time.time() + 300  # reset after 5 min
-        logger.warning("OpenRouter: rate limited on key 1 — rotated to key 2")
+    """Switch to the next OpenRouter API key via the centralized pool."""
+    pool = _get_key_pool()
+    current = pool.get_key()
+    pool.mark_rate_limited(current)
+    logger.warning("OpenRouter: rate limited — rotated to next key (pool=%d keys)", pool.pool_size)
 
 
 def _get_config() -> dict[str, str]:
@@ -262,11 +236,11 @@ def _call_single_model(model: str, api_key: str | None, full_prompt: str,
 
             except Exception as exc:
                 if _is_rate_limit_error(exc):
-                    # OpenRouter key rotation — try key 2 before falling back
+                    # OpenRouter key rotation — try next key before falling back
                     if model.lower().startswith("openrouter/"):
-                        rotate_in_openrouter_key()
-                        # Re-resolve the API key (now key 2 after rotation)
-                        api_key = _get_openrouter_key()
+                        pool = _get_key_pool()
+                        pool.mark_rate_limited(api_key)
+                        api_key = pool.get_key()
                         continue  # retry with the rotated key
                     # Quota exhausted / 429 — the exact case fallback exists
                     # for. Don't burn ~30s sleeping on a dead provider.
@@ -332,6 +306,12 @@ def llm_call(prompt: str, text_block: str, max_tokens: int | None = None) -> str
         # Empty (or None) result counts as a failure — try the next model.
         # A model that returns "" produced no usable answer.
         if result:
+            # Mark key as successful (resets failure counter)
+            if api_key and api_key != "local":
+                try:
+                    _get_key_pool().mark_success(api_key)
+                except Exception:
+                    pass
             return result
         logger.warning("Model %s failed — trying next model in chain", model)
 

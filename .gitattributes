@@ -1,0 +1,56 @@
+# ============================================
+# FOL — Git Attributes
+# Ensures consistent line endings across platforms
+# ============================================
+
+# Default — auto-detect text files and normalize line endings
+* text=auto
+
+# Explicitly declare text files
+*.py text diff=python
+*.js text diff=node
+*.ts text diff=node
+*.tsx text diff=node
+*.jsx text diff=node
+*.json text
+*.yml text
+*.yaml text
+*.toml text
+*.md text diff=markdown
+*.txt text
+*.sh text eol=lf
+*.bash text eol=lf
+*.bat text eol=crlf
+*.cmd text eol=crlf
+*.html text diff=html
+*.css text
+*.scss text
+*.swift text
+
+# Config files
+*.env text
+*.env.example text
+*.env.template text
+.gitignore text
+.gitattributes text
+
+# Binary files — do not diff or convert
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.webp binary
+*.pkg binary
+*.dmg binary
+*.zip binary
+*.tar.gz binary
+*.wav binary
+*.mp3 binary
+*.woff binary
+*.woff2 binary
+*.ttf binary
+*.eot binary
+
+# Lock files — keep as-is
+package-lock.json -diff linguist-generated

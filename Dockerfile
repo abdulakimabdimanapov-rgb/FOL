@@ -1,25 +1,88 @@
-# ────────────────────────────────────────────────────────────────
-# FOL — Backend image
-# Builds the Python FastAPI backend (src.server) plus the orchestrator.
-# The orchestrator needs a desktop (agent-server) to run tools, so the
-# container ships the API + LLM layer; desktop automation stays native.
-#
-# Uses requirements-core.txt (cross-platform deps) — macOS-only packages
-# (MLX, pyobjc) are intentionally excluded and live in requirements.txt.
-# ────────────────────────────────────────────────────────────────
+# ============================================
+# FOL — Personal AI Assistant
+# Multi-stage Dockerfile for cross-platform deployment
+# ============================================
+
+# --------------- Stage 1: Base ---------------
 FROM python:3.11-slim AS base
 
-ENV PYTHONDONTWRITEBYTECODE=1 \
-    PYTHONUNBUFFERED=1 \
-    PIP_NO_CACHE_DIR=1
+# System deps
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    ffmpeg \
+    espeak-ng \
+    libespeak-ng-dev \
+    scrot \
+    xdotool \
+    libnotify-bin \
+    pulseaudio \
+    alsa-utils \
+    curl \
+    git \
+    && rm -rf /var/lib/apt/lists/*
 
+# Create non-root user
+RUN useradd -m -s /bin/bash fol
 WORKDIR /app
 
-COPY requirements-core.txt .
-RUN pip install --no-cache-dir -r requirements-core.txt
+# --------------- Stage 2: Dependencies ---------------
+FROM base AS deps
 
-COPY . .
+# Copy requirements first (cache layer)
+COPY requirements.txt .
+RUN pip install --no-cache-dir --upgrade pip \
+    && pip install --no-cache-dir -r requirements.txt
 
-EXPOSE 8000 8420
+# --------------- Stage 3: Application ---------------
+FROM deps AS app
 
-CMD ["uvicorn", "src.server:app", "--host", "0.0.0.0", "--port", "8000"]
+# Copy application code
+COPY fol/ ./fol/
+COPY orchestrator/ ./orchestrator/
+COPY agent-server/ ./agent-server/
+COPY analyze/ ./analyze/
+COPY auth/ ./auth/
+COPY fetch/ ./fetch/
+COPY clean/ ./clean/
+COPY utils/ ./utils/
+COPY context_engine/ ./context_engine/
+COPY obsidian/ ./obsidian/
+COPY setup/ ./setup/
+
+# Copy config files
+COPY .env.example ./.env.template
+COPY VERSION ./
+
+# Copy main entry points
+COPY main.py ./
+COPY run_all.sh ./
+
+# Make scripts executable
+RUN chmod +x run_all.sh setup/*.py
+
+# Create logs directory
+RUN mkdir -p /app/logs && chown -R fol:fol /app
+
+# Switch to non-root user
+USER fol
+
+# --------------- Stage 4: Runtime ---------------
+FROM app AS runtime
+
+# Environment
+ENV PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONPATH=/app:/app/fol \
+    HOST=0.0.0.0 \
+    PORT=8420 \
+    FOL_BRAIN=current \
+    FOL_STT_PROVIDER=groq
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=10s --start-period=15s --retries=3 \
+    CMD curl -f http://localhost:8420/status || exit 1
+
+# Expose ports
+EXPOSE 8420 8421 8754 3000
+
+# Default command: start all services
+CMD ["python3", "orchestrator/server.py"]

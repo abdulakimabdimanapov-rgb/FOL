@@ -131,10 +131,10 @@ class TestValidStates:
     """Tests for VALID_STATES tuple."""
 
     def test_states_count(self):
-        """Should have exactly 5 valid states."""
+        """Should have exactly 6 valid states."""
         from server import VALID_STATES
 
-        assert len(VALID_STATES) == 5
+        assert len(VALID_STATES) == 6
 
     def test_contains_idle(self):
         from server import VALID_STATES
@@ -160,6 +160,11 @@ class TestValidStates:
         from server import VALID_STATES
 
         assert "error" in VALID_STATES
+
+    def test_contains_cancelled(self):
+        from server import VALID_STATES
+
+        assert "cancelled" in VALID_STATES
 
 
 # ---------------------------------------------------------------------------

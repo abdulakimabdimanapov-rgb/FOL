@@ -1,0 +1,28 @@
+# FOL — Linux Dependencies
+# Core (same as requirements.txt)
+fastapi>=0.100.0
+uvicorn>=0.23.0
+httpx>=0.24.0
+pydantic>=2.0.0
+python-dotenv>=1.0.0
+litellm>=1.0.0
+
+# STT — Groq Whisper (cross-platform, free)
+# mlx-whisper is Apple Silicon only, so Linux uses Groq API
+# Set GROQ_API_KEY in .env and FOL_STT_PROVIDER=groq
+
+# TTS — espeak-ng (install: sudo apt install espeak-ng)
+# Or use ElevenLabs (set ELEVENLABS_API_KEY in .env)
+
+# Screen — scrot/maim for screenshots (install: sudo apt install scrot)
+# xdotool for active window detection (install: sudo apt install xdotool)
+
+# Notifications — notify-send (install: sudo apt install libnotify-bin)
+
+# Audio — PulseAudio for microphone (install: sudo apt install pulseaudio)
+
+# Optional: PyAutoGUI for mouse/keyboard control
+# pyautogui>=0.9.54
+
+# Optional: browser automation
+# playwright>=1.40.0

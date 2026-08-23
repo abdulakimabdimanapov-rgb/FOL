@@ -73,6 +73,7 @@ tsconfig.tsbuildinfo
 *.pkg
 *.dmg
 Release/
+*.wav
 
 # Next.js
 .next/
@@ -101,3 +102,29 @@ fol/.coverage 2
 # Runtime state (episodic memory, benchmark results — generated, not source)
 orchestrator/output/
 benchmark/results.jsonl
+
+# === Dev-only docs (not for public GitHub) ===
+SHIP_CHECKLIST.md
+FREEBUFF_PTY_BRIDGE_AUDIT.md
+CONVERSATION_UX_AUDIT.md
+LLM_MIGRATION_REPORT.md
+LOCAL_LLM_REMOVAL_PLAN.md
+AUDIT_REPORT.md
+FOL_FREEBUFF_AUDIT.md
+DEVLOG-2.md
+PROJECT_DESCRIPTION.md
+SCREENSHOTS.md
+
+# === Build artifacts (generated) ===
+*.pkg
+*.dmg
+*.wav
+*.mp3
+*.ogg
+Release/
+
+# === Dev test files (not for public) ===
+test-mjpeg.py
+
+# === Other dev docs ===
+STARDANCE.md

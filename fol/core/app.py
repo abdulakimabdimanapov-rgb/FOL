@@ -230,17 +230,13 @@ class FOL:
         """Startup hook — initialize all modules."""
         logger.info("FOL starting up", version=self.version)
 
-        # Initialize LLM Engine — OpenAI as primary, MLX as local fallback
-        from modules.llm.engine import LLMEngine
-        self._llm = LLMEngine(config={
-            "llm_backend": self.config.llm_backend,
-            "llm_model": self.config.llm_model,
+        # Initialize Brain Engine — unified LLM through BrainInterface.
+        # Uses get_brain() which reads FOL_BRAIN env (current / freebuff / codebuff)
+        # and routes through the canonical BrainRouter with automatic fallback.
+        # This replaces the legacy LLMEngine which had its own parallel routing.
+        from core.brain_engine import BrainEngineAdapter
+        self._llm = BrainEngineAdapter(config={
             "llm_max_tokens": self.config.llm_max_tokens,
-            "openai_api_key": self.config.openai_api_key,
-            "openai_model": self.config.openai_model,
-            "openrouter_api_key": self.config.openrouter_api_key,
-            "openrouter_model": self.config.openrouter_model,
-            "openrouter_base_url": self.config.openrouter_base_url,
         })
         await self._llm.initialize()
         self.orchestrator.register_module("llm", self._llm)
@@ -249,18 +245,10 @@ class FOL:
         # always up to date (a later model swap is visible to the next one).
         if self._brain:
             try:
-                active = getattr(self._llm, "active_model", None) or self.config.llm_model
+                active = self._llm.active_model or self.config.llm_model
                 self._brain.record_model_change(str(active))
             except Exception as exc:
                 logger.debug("Brain model record failed: %s", exc)
-
-        # Canonical LLM routing interface (Phase 2) — the single routing
-        # abstraction for new code: local/cloud/fallback through one contract.
-        # EngineBackendRouter adapts the native engine; the env-configured
-        # LiteLLMRouter is available via modules.llm.router.get_llm_router().
-        from modules.llm.router import EngineBackendRouter
-        self._llm_router = EngineBackendRouter(self._llm)
-        self.orchestrator.register_module("llm_router", self._llm_router)
 
         # Load Obsidian memories into context
         self._load_obsidian_context()
@@ -354,6 +342,21 @@ class FOL:
 
         self._conversation = ConversationHistory()
         await self._conversation.initialize()
+        # Preload recent turns from the shared conversation store so FOL Core
+        # sees the orchestrator's chat history (unified conversation across
+        # both interfaces: SwiftUI chat and CLI).
+        if not self._conversation_history:
+            try:
+                recent_turns = self._conversation.load_recent_sync(self._max_history)
+                if recent_turns:
+                    self._conversation_history = [
+                        {"user": t.user_input, "assistant": t.assistant_response}
+                        for t in recent_turns
+                        if t.user_input or t.assistant_response
+                    ]
+                    logger.info("Preloaded %d messages from shared conversation history", len(self._conversation_history))
+            except Exception as exc:
+                logger.debug("Could not preload shared history: %s", exc)
         self._kg = KnowledgeGraph()
         await self._kg.initialize()
         self._preferences_store = PreferencesStore()
@@ -388,7 +391,7 @@ class FOL:
         self._init_proactive()
 
         self.event_bus.emit(EventType.SYSTEM_STARTUP, source="app")
-        logger.info("FOL modules initialized", backends=self._llm.available_backends if self._llm else [])
+        logger.info("FOL modules initialized", backends=self._llm.available_backends if self._llm else [], brain=self._brain_interface.name if self._brain_interface else "none")
 
         # JARVIS-style startup greeting
         await self._speak_startup_greeting()
@@ -438,6 +441,7 @@ class FOL:
                 logger.error("Error shutting down brain manager: %s", exc)
         
         if self._llm:
+            # BrainEngineAdapter.shutdown() is a no-op (BrainInterface handles its own lifecycle)
             await self._llm.shutdown()
         if self._tts_output:
             await self._tts_output.shutdown()

@@ -116,7 +116,7 @@ class TestFreebuffBrainAdapter:
 
         adapter = FreebuffBrainAdapter()
         with pytest.raises(BrainError):
-            asyncio.get_event_loop().run_until_complete(
+            asyncio.run(
                 adapter.acomplete([{"role": "user", "content": "hello"}])
             )
 
@@ -441,11 +441,11 @@ class TestGetBrainFactory:
 
     @patch.dict(os.environ, {}, clear=True)
     def test_get_brain_freebuff_unavailable(self):
-        """get_brain('freebuff') raises when OpenRouter key is missing."""
-        from modules.llm.brain import BrainConfigurationError, get_brain
+        """get_brain('freebuff') falls back to current when OpenRouter key is missing."""
+        from modules.llm.brain import CurrentLLMAdapter, get_brain
 
-        with pytest.raises(BrainConfigurationError):
-            get_brain("freebuff")
+        brain = get_brain("freebuff")
+        assert isinstance(brain, CurrentLLMAdapter)
 
     @patch.dict(os.environ, {}, clear=True)
     def test_get_brain_unknown(self):

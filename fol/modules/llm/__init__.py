@@ -15,6 +15,12 @@ from modules.llm.router import (
     build_model_chain,
     api_key_for_model,
 )
+from modules.llm.key_manager import (
+    KeyManager,
+    ValidationResult,
+    PROVIDERS,
+    get_key_manager,
+)
 from modules.llm.brain import (
     BrainInterface,
     CurrentLLMAdapter,
@@ -33,6 +39,10 @@ __all__ = [
     "get_llm_router",
     "build_model_chain",
     "api_key_for_model",
+    "KeyManager",
+    "ValidationResult",
+    "PROVIDERS",
+    "get_key_manager",
     "BrainInterface",
     "CurrentLLMAdapter",
     "FreebuffBrainAdapter",
