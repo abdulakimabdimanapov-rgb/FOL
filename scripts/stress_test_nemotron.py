@@ -43,7 +43,7 @@ ORCH_BASE = f"http://127.0.0.1:{ORCH_PORT}"
 
 # The real key that lives in .env — used ONLY to prove it never leaks into
 # logs / SSE / final responses.
-REAL_KEY = "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"
+REAL_KEY = ""
 
 FORBIDDEN = {"done", "готово", "ok", "принято", "выполнено", "сделано",
              "success", "completed", "task completed", "yes", "успешно",
