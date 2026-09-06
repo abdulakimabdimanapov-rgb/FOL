@@ -10,10 +10,10 @@ echo  ╔═══════════════════════�
 echo  ║   🧠  FOL — Personal AI Assistant                  ║
 echo  ║   One-Click Installer (Windows)                     ║
 echo  ╚══════════════════════════════════════════════════════╝
-echo.
-
+echo.    
+   
 REM ─── Step 1: Check Python ────────────────────────────────
-echo  [1/6] Checking Python...
+echo  [1/6] Checking Python... 
 
 python --version >nul 2>&1
 if errorlevel 1 (
@@ -27,26 +27,26 @@ if errorlevel 1 (
     pause
     exit /b 1
 )
-
+   
 for /f "tokens=2" %%a in ('python --version 2^>^&1') do set PYVER=%%a
 echo  ✅ Python %PYVER%
 
 REM ─── Step 2: System dependencies ─────────────────────────
 echo.
-echo  [2/6] Checking system dependencies...
+echo  [2/6] Checking system dependencies...  
 
 REM Check if Chocolatey is installed
 choco --version >nul 2>&1
 if errorlevel 1 (
-    echo  ℹ️  Chocolatey not found — skipping ffmpeg install
+    echo  ℹ️  Chocolatey not found — skipping ffmpeg install  
     echo     Install manually: https://chocolatey.org/install
     echo     Then run: choco install ffmpeg
-) else (
+) else (. 
     echo  ℹ️  Installing ffmpeg via Chocolatey...
     choco install ffmpeg -y 2>nul
     echo  ✅ ffmpeg installed
 )
-
+   
 REM ─── Step 3: Python dependencies ─────────────────────────
 echo.
 echo  [3/6] Installing Python packages...
@@ -119,3 +119,4 @@ if /i "%START%"=="Y" (
 )
 
 pause
+                 
