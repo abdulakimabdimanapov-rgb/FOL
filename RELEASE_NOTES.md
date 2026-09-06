@@ -4,7 +4,11 @@
 > Notch-панель, голос, зрение, живая память (Obsidian), агентный цикл
 > с авто-выбором инструментов и автопереключением моделей.
 >
+<<<<<<< HEAD
 > **v1.2.0** — Brain-бэкенды (внешний AI-SDK / Freebuff), безопасность (race condition, shell injection, memory leak), 1073+ тестов.
+=======
+> **v1.2.0** — Brain-бэкенды (Codebuff/Freebuff), безопасность (race condition, shell injection, memory leak), 1073+ тестов.
+>>>>>>> f6e354dd7c7bbb2971157a338730d3911762af80
 
 ## Системные требования
 
