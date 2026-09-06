@@ -790,4 +790,4 @@ def llm_completion_sync(
 
     logger.error("All %d model(s) failed for sync completion", len(chain))
     return ""
-                       
+ 
