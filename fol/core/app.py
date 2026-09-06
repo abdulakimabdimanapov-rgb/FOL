@@ -231,7 +231,11 @@ class FOL:
         logger.info("FOL starting up", version=self.version)
 
         # Initialize Brain Engine — unified LLM through BrainInterface.
+<<<<<<< HEAD
         # Uses get_brain() which reads FOL_BRAIN env (current / freebuff / freebuff_tmux …)
+=======
+        # Uses get_brain() which reads FOL_BRAIN env (current / freebuff / codebuff)
+>>>>>>> f6e354dd7c7bbb2971157a338730d3911762af80
         # and routes through the canonical BrainRouter with automatic fallback.
         # This replaces the legacy LLMEngine which had its own parallel routing.
         from core.brain_engine import BrainEngineAdapter
