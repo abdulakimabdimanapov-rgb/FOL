@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Removed
+
+- **Deprecated brain-бэкенд** — удалён из `fol/modules/llm/`; `FOL_BRAIN` больше его не поддерживает (валидные значения: `current`, `freebuff`, `freebuff_auto`, `freebuff_tmux`)
+- **`CLAUDE.md`** — удалён как устаревший; контекст для AI-моделей теперь живёт в `FOL_UPGRADE.md` и `docs/`
+
 ## [1.3.0] — 2026-08-20
 
 ### Added
@@ -37,7 +44,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 **Brain-бэкенды — расширение мозга FOL**
-- **CodebuffSDKBrainAdapter** (`fol/modules/llm/codebuff_adapter.py`): мозг через Codebuff SDK (`npx codebuff run --json`), поддержка streaming JSON-lines, реализует контракт `BrainInterface` (chat / chat_stream / acomplete). Активация: `FOL_BRAIN=codebuff` + `CODEBUFF_API_KEY`
+- **SDKBrainAdapter** (`fol/modules/llm/sdk_adapter.py`): мозг через внешний AI-агент SDK (CLI `run --json`), поддержка streaming JSON-lines, реализует контракт `BrainInterface` (chat / chat_stream / acomplete). Активация через `FOL_BRAIN` + переменные окружения SDK
 - **FreebuffBrainAdapter** (`fol/modules/llm/freebuff.py`): placeholder для будущего HTTP API Freebuff. Документированы `FREEBUFF_REQUIREMENTS` (API URL, token, model). Активация: `FOL_BRAIN=freebuff`
 - **BrainRouter** (`fol/modules/llm/brain_router.py`): роутинг brain-бэкендов с автоматическим fallback и мониторингом здоровья
 - **Freebuff модели через OpenRouter**: DeepSeek V4 Flash (primary), MiMo 2.5 (fallback), Nemotron (fallback) — бесплатно, через LiteLLM
@@ -54,10 +61,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
-- **`.env.example`**: добавлены Freebuff модели (DeepSeek V4 Flash, MiMo 2.5) + Codebuff SDK настройки
+- **`.env.example`**: добавлены Freebuff модели (DeepSeek V4 Flash, MiMo 2.5) + настройки внешнего SDK
 - **`.env.template`**: `LLM_MODEL=openrouter/deepseek/deepseek-v4-flash` (primary), fallback-цепочка обновлена
-- **`fol/.env.example`**: Codebuff + Freebuff секции
-- **`CLAUDE.md`**: секции 1.9 (Brain-бэкенды) + 1.10 (Security-фиксы)
+- **`fol/.env.example`**: секции внешнего SDK + Freebuff
+- **Документация**: секции 1.9 (Brain-бэкенды) + 1.10 (Security-фиксы)
 
 ### Fixed
 

@@ -65,7 +65,6 @@ In the file `.env`, set `FOL_BRAIN`:
 |-------------|------|------------|
 | `current` | **Default.** Uses OpenRouter API. Free models available. | По умолчанию. Через API. |
 | `freebuff` | Starts Freebuff in background. | Запускает Freebuff в фоне |
-| `codebuff` | Paid. Needs `CODEBUFF_API_KEY`. | Платный |
 
 ### Free AI Models / Бесплатные модели
 

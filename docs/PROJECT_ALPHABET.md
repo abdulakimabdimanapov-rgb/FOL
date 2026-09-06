@@ -121,9 +121,6 @@ LLM (LiteLLM: OpenRouter / OpenAI / Anthropic / Gemini — cloud-only)
 - **Путь:** `CHANGELOG.md` · **Формат:** Keep a Changelog, SemVer
 - **История:** v0.2.0 → 0.3.0 → 0.4.0 → 1.0.0-beta → **1.0.0**
 
-### CLAUDE.md — Контекст для AI-моделей
-- **Путь:** `CLAUDE.md` · **Роль:** единая документация для моделей (роутер, нормализация, тесты, баги)
-
 ### clean — Очистка почты
 - **Путь:** `clean/email_cleaner.py` · **Роль:** HTML → plain text для анализа
 
