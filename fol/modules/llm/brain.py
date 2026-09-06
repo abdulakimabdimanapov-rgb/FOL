@@ -41,7 +41,7 @@ import logging
 import os
 from typing import Any, AsyncIterator
 
-from modules.llm.freebuff import FREEBUFF_REQUIREMENTS, freebuff_config, codebuff_config
+from modules.llm.freebuff import FREEBUFF_REQUIREMENTS, freebuff_config
 from modules.llm.router import LLMRouter, get_llm_router
 
 logger = logging.getLogger(__name__)
@@ -415,8 +415,7 @@ class FreebuffBrainAdapter(BrainInterface):
     """Honest Freebuff backend behind :class:`BrainInterface`.
 
     Audited 2026-08-17: Freebuff has no supported programmatic interface
-    (CLI is an interactive TUI; no public HTTP API / server / socket;
-    ``@codebuff/sdk`` belongs to Codebuff, not the free Freebuff service).
+    (CLI is an interactive TUI; no public HTTP API / server / socket).
     This adapter therefore MUST NOT pretend Freebuff is callable: every
     reasoning method raises :class:`BrainUnavailableError` (streaming yields
     an ``error`` event), and it never contacts invented endpoints or touches
@@ -594,35 +593,12 @@ def get_brain(name: str | None = None, *, router: LLMRouter | None = None) -> Br
         # Freebuff tmux primary, LiteLLM fallback
         return BrainRouter([bridge, CurrentLLMAdapter(router=router)])
 
-    if cfg in ("codebuff", "codebuff_sdk"):
-        # Codebuff SDK (paid — requires CODEBUFF_API_KEY)
-        from modules.llm.brain_router import BrainRouter
-        from modules.llm.codebuff_adapter import CodebuffSDKBrainAdapter
-
-        codebuff = CodebuffSDKBrainAdapter(config=codebuff_config())
-        if not codebuff.available:
-            missing = []
-            cfg_data = codebuff_config()
-            if not cfg_data.get("api_key"):
-                missing.append("CODEBUFF_API_KEY")
-            if codebuff._node_available is False:
-                missing.append("node (Node.js)")
-            if codebuff._sdk_available is False:
-                missing.append("@codebuff/sdk (npm install -g @codebuff/sdk)")
-            raise BrainConfigurationError(
-                f"Codebuff SDK unavailable — missing: {', '.join(missing)}. "
-                f"Get your API key at https://codebuff.com/api-keys "
-                f"and install the SDK: npm install -g @codebuff/sdk"
-            )
-        # Codebuff primary, LiteLLM fallback
-        return BrainRouter([codebuff, CurrentLLMAdapter(router=router)])
-
     raise BrainConfigurationError(
         f"Unknown FOL_BRAIN={cfg!r}. Valid values: "
         f"'current' (default), 'freebuff' (Freebuff via OpenRouter), "
         f"'freebuff_auto' (Freebuff CLI auto-start + fallback), "
         f"'freebuff_tmux' (Freebuff CLI via tmux), "
-        f"'freebuff_cli' (deprecated PTY), 'codebuff' (Codebuff SDK, paid)."
+        f"'freebuff_cli' (deprecated PTY)."
     )
 
 
