@@ -1,28 +1,3 @@
-"""
-Async LLM calling module — supports any provider via LiteLLM with streaming + tool calls.
-
-Usage:
-    from analyze._llm_async import llm_acompletion, llm_astream
-
-    # Simple async completion
-    response = await llm_acompletion(
-        messages=[{"role": "user", "content": "Hello"}],
-        max_tokens=1024,
-    )
-
-    # With tool calls
-    response = await llm_acompletion(
-        messages=[{"role": "user", "content": "Send an email"}],
-        tools=TOOL_DEFINITIONS,
-    )
-
-    # Streaming
-    async for chunk in llm_astream(messages=[...]):
-        if chunk["type"] == "token":
-            print(chunk["text"])
-        elif chunk["type"] == "tool_use":
-            print(chunk["name"])
-"""
 
 from __future__ import annotations
 
@@ -790,8 +765,4 @@ def llm_completion_sync(
 
     logger.error("All %d model(s) failed for sync completion", len(chain))
     return ""
-<<<<<<< HEAD
-                                     
-=======
- 
->>>>>>> f6e354dd7c7bbb2971157a338730d3911762af80
+              
