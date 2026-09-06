@@ -125,9 +125,8 @@ class TestUnavailableEverywhere:
             FreebuffBrainAdapter().verify("claim", "evidence")
 
     def test_requirements_documented(self):
-        # New requirements mention OpenRouter and Codebuff as alternatives
+        # Requirements mention OpenRouter as the free alternative
         assert "OpenRouter" in FREEBUFF_REQUIREMENTS or "FREEBUFF_API_URL" in FREEBUFF_REQUIREMENTS
-        assert "Codebuff" in FREEBUFF_REQUIREMENTS or "FREEBUFF_API_TOKEN" in FREEBUFF_REQUIREMENTS
 
 
 class TestBrainInterfaceCompatibility:
